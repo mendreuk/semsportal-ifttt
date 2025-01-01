@@ -1,0 +1,77 @@
+{
+  "id": "con_WPHmcgjYVkESlWBV",
+  "options": {
+    "mfa": {
+      "active": true,
+      "return_enroll_settings": true
+    },
+    "attributes": {
+      "email": {
+        "signup": {
+          "status": "required",
+          "verification": {
+            "active": true
+          }
+        },
+        "identifier": {
+          "active": true
+        },
+        "profile_required": true,
+        "verification_method": "link"
+      }
+    },
+    "import_mode": false,
+    "configuration": {},
+    "customScripts": {
+      "login": "function login(email, password, callback) {\n\tconst request = require('request');\n  \n  request.post({\n    url: 'https://eu.semsportal.com/api/v2/Common/CrossLogin',\n    headers: {\n        'Token': '{\"version\":\"v3.1\",\"client\":\"ios\",\"language\":\"en\"}'\n    },\n    json: {\n      account: email,\n      pwd: password\n    }\n    //for more options check:\n    //https://github.com/mikeal/request#requestoptions-callback\n  }, function(err, response, body) {\n    if (err) return callback(err);\n    if (response.statusCode >= 400) return callback(response.statusCode);\n    if (body.code !== 0) return callback(body.code);\n    \n    callback(null, {\n      user_id: body.data.uid,\n      email: email,\n      user_metadata: {\n        svc_name: 'semsportal',\n        svc_password: Buffer.from(password).toString('base64')\n      }\n    });\n  });\n}",
+      "create": "function create(user, callback) {\n  const mysql = require('mysql');\n  const bcrypt = require('bcrypt');\n\n  const connection = mysql.createConnection({\n    host: 'localhost',\n    user: 'me',\n    password: 'secret',\n    database: 'mydb'\n  });\n\n  connection.connect();\n\n  const query = 'INSERT INTO users SET ?';\n\n  bcrypt.hash(user.password, 10, function(err, hash) {\n    if (err) return callback(err);\n\n    const insert = {\n      password: hash,\n      email: user.email\n    };\n\n    connection.query(query, insert, function(err, results) {\n      if (err) return callback(err);\n      if (results.length === 0) return callback();\n      callback(null);\n    });\n  });\n}\n",
+      "delete": "function remove(id, callback) {\n  // This script remove a user from your existing database.\n  // It is executed whenever a user is deleted from the API or Auth0 dashboard.\n  //\n  // There are two ways that this script can finish:\n  // 1. The user was removed successfully:\n  //     callback(null);\n  // 2. Something went wrong while trying to reach your database:\n  //     callback(new Error(\"my error message\"));\n\n  const msg = 'Please implement the Delete script for this database ' +\n    'connection at https://manage.auth0.com/#/connections/database';\n//  return callback(new Error(msg));\n  \n  // do nothing\n  return callback(null);\n}\n",
+      "verify": "function verify(email, callback) {\n  // This script should mark the current user's email address as verified in\n  // your database.\n  // It is executed whenever a user clicks the verification link sent by email.\n  // These emails can be customized at https://manage.auth0.com/#/emails.\n  // It is safe to assume that the user's email already exists in your database,\n  // because verification emails, if enabled, are sent immediately after a\n  // successful signup.\n  //\n  // There are two ways that this script can finish:\n  // 1. The user's email was verified successfully\n  //     callback(null, true);\n  // 2. Something went wrong while trying to reach your database:\n  //     callback(new Error(\"my error message\"));\n  //\n  // If an error is returned, it will be passed to the query string of the page\n  // where the user is being redirected to after clicking the verification link.\n  // For example, returning `callback(new Error(\"error\"))` and redirecting to\n  // https://example.com would redirect to the following URL:\n  //     https://example.com?email=alice%40example.com&message=error&success=false\n\n  const msg = 'Please implement the Verify script for this database connection ' +\n    'at https://manage.auth0.com/#/connections/database';\n  return callback(new Error(msg));\n}\n",
+      "get_user": "function getByEmail(email, callback) {\n  const MongoClient = require('mongodb@3.1.4').MongoClient;\n  const client = new MongoClient('mongodb://user:pass@localhost');\n\n  client.connect(function (err) {\n    if (err) return callback(err);\n\n    const db = client.db('db-name');\n    const users = db.collection('users');\n\n    users.findOne({ email: email }, function (err, user) {\n      client.close();\n\n      if (err) return callback(err);\n      if (!user) return callback(null, null);\n\n      return callback(null, {\n        user_id: user._id.toString(),\n        nickname: user.nickname,\n        email: user.email\n      });\n    });\n  });\n}\n",
+      "change_password": "function changePassword(email, newPassword, callback) {\n  const request = require('request');\n\n  request.put({\n    url: 'https://localhost/users',\n    json: { email: email, password: newPassword }\n    //for more options check:\n    //https://github.com/mikeal/request#requestoptions-callback\n  }, function(err, response, body) {\n    if (err) return callback(err);\n    if (response.statusCode === 401) return callback();\n    callback(null, body);\n  });\n}\n"
+    },
+    "disable_signup": true,
+    "passwordPolicy": "good",
+    "passkey_options": {
+      "challenge_ui": "both",
+      "local_enrollment_enabled": true,
+      "progressive_enrollment_enabled": true
+    },
+    "password_history": {
+      "size": 5,
+      "enable": false
+    },
+    "strategy_version": 2,
+    "password_dictionary": {
+      "enable": false,
+      "dictionary": []
+    },
+    "authentication_methods": {
+      "passkey": {
+        "enabled": false
+      },
+      "password": {
+        "enabled": true
+      }
+    },
+    "brute_force_protection": true,
+    "password_no_personal_info": {
+      "enable": false
+    },
+    "password_complexity_options": {
+      "min_length": 8
+    },
+    "enabledDatabaseCustomization": true,
+    "disable_self_service_change_password": true
+  },
+  "strategy": "auth0",
+  "name": "Username-Password-Authentication",
+  "is_domain_connection": false,
+  "enabled_clients": [
+    "soT6LPSzTT22A7wjRZBZQUUQAR5SIZ8p",
+    "vorIwcBdo8NBxpFCRAPbtvH7cHYRQfzC"
+  ],
+  "realms": [
+    "Username-Password-Authentication"
+  ]
+}

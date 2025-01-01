@@ -1,0 +1,64 @@
+  /*
+   *  See our documentation for full details:
+   *
+   *    https://ifttt.com/docs/testing
+   *
+   *  What is this?
+   *
+   *    This JSON document should provide samples for trigger and action fields and,
+   *    if required, a valid user access token corresponding to a test user on your
+   *    service. We will use this data to automatically test your integration.
+   *
+   *    We have generated the scaffold for you, but feel free to update as necessary.
+   *
+   *  Where do I put this?
+   *
+   *    This should be returned by your API at the following endpoint:
+   *    https://api-qotwtgvfiq-oe.a.run.app/ifttt/v1/test/setup
+   *
+   *  `accessToken` (OAuth only)
+   *
+   *    This should be a valid access token that corresponds to a user on your service.
+   *
+   *  `triggers`
+   *
+   *    For all triggers that have trigger fields, provide a set of valid values for
+   *    those trigger fields. These will be used in requests to verify that trigger
+   *    endpoints respond appropriately.
+   *
+   *  `triggerFieldValidations`
+   *
+   *    For all triggers with dynamic validators, provide a valid example and an invalid example.
+   *
+   *  `actions`
+   *
+   *    For all actions, provide a set of valid values for each action field.
+   *
+   *  `actionRecordSkipping`
+   *
+   *    If you have implemented record-skipping for your action, you can optionally
+   *    provide test inputs that cause your action endpoint to return a record-skip response.
+   *
+   *    We highly recommend you implement record-skipping. Learn more:
+   *    https://ifttt.com/docs/api_reference#skipping-actions
+   *
+   */
+
+
+{
+    "data": {
+        "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IkU1SlM0ZlNoYlR6X0E2NkZrV1FHWSJ9.eyJodHRwczovL2lmdHR0LmNvbS9zZW1zcG9ydGFsL3N2Y19hY2Nlc3NfdG9rZW4iOiJleUoxYVdRaU9pSmxNV0UzTnpKbE5DMWlPRFV5TFRRNU5EWXRPR0U1TkMxa05HVTRaRGhsT1dRME1tUWlMQ0owYVcxbGMzUmhiWEFpT2pFM016VTNOREl5TlRFMk1ETXNJblJ2YTJWdUlqb2lNVEUzTnprelpqRmpZbVppWlRNek5qQXdObVV3TlRJd09UbGtNMkZoWkRFaUxDSmpiR2xsYm5RaU9pSnBiM01pTENKMlpYSnphVzl1SWpvaWRqTXVNU0lzSW14aGJtZDFZV2RsSWpvaVpXNGlmUT09IiwiaHR0cHM6Ly9pZnR0dC5jb20vc2Vtc3BvcnRhbC9lbWFpbCI6ImFsb2lzLmh1aG9AZ21haWwuY29tIiwiaXNzIjoiaHR0cHM6Ly9kZXYtNHdud3N2eTEwcHQwNDMwZS51cy5hdXRoMC5jb20vIiwic3ViIjoiYXV0aDB8ZTFhNzcyZTQtYjg1Mi00OTQ2LThhOTQtZDRlOGQ4ZTlkNDJkIiwiYXVkIjpbInNlbXNwb3J0YWwtaWZ0dHQiLCJodHRwczovL2Rldi00d253c3Z5MTBwdDA0MzBlLnVzLmF1dGgwLmNvbS91c2VyaW5mbyJdLCJpYXQiOjE3MzU3NDIyNTEsImV4cCI6MTczNTgyODY1MSwic2NvcGUiOiJvcGVuaWQgcHJvZmlsZSBlbWFpbCBvZmZsaW5lX2FjY2VzcyIsImF6cCI6InNvVDZMUFN6VFQyMkE3d2pSWkJaUVVVUUFSNVNJWjhwIn0.ntfpqhxhaMyBh_abKQU3nObNPlTY8JGLGTYXaE-IV20KnlVSxBa7QQnx10cS3JLOTyXGqYIuNb_K5SsEl7CngXETBsTnE_-xyWKO-E3Yy0fn1JnvPUcdJI5MoleLC6MQnxYmiOh7ngwkSbmhBPyszTk_aD8qEjV24Ekg7nSBEfn-c78JnDVt2TQ-KjwuUli5poVG0ff7Vj49Ul5RhI7E0eHTw5vePDjiYbobasTyfSBqPMn6Nfil3SqkXwp00LzpgQbdZVPwFK3ddVC4NezWKkBB558dieo0gFBpq1419TaWukTQiBHBSKP9SGkbcSeNRxt-EzDStxseAQG7_ArrVw",
+        "samples": {
+            "triggers": {
+                "metric_exceeds_limit": {
+                    "inverter_metric_id": "d2b9fcca-64da-405b-81ba-83abbced643a|+0100|92500SSN194W0086|18|Pac",
+                    "limit_value": "1000"
+                }, 
+                "metric_drops_below_limit": {
+                    "inverter_metric_id": "d2b9fcca-64da-405b-81ba-83abbced643a|-0100|92500SSN194W0086|18|Pac",
+                    "limit_value": "1200"
+                }
+            }
+        }
+    }
+}

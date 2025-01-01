@@ -1,0 +1,5 @@
+- volat semsportal periodicky a notifikovat pres RealTimeAPI
+- pri review pred nasazenim do produ mozna bude problem s prihlasovanim https://ifttt.com/docs/guidelines#authentication
+
++ google cloud run instance bezi vzdy v UTC nezavisle na regionu, kde jsou nadeployovane
++ auth0: na login strance umazat "Forgot password?" https://community.auth0.com/t/how-to-remove-the-forgot-password-link-from-the-new-universal-login-page/92554
