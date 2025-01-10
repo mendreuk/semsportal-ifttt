@@ -1,89 +1,153 @@
-const { callHttpJson, throwError } = require('./helper');
-const getUuid = require('uuid-by-string');
-const { find } = require('geo-tz');
+import { callHttpJson, throwError } from './helper.js';
+import getUuid from 'uuid-by-string';
+import { find } from 'geo-tz';
+import { LRUCache } from 'lru-cache';
+import AsyncLock from 'async-lock';
 
 const SEMS_PORTAL_API_BASEURL = 'https://eu.semsportal.com/api/';
 
-module.exports = {
+const cacheLock = new AsyncLock();
+const getStationHistoryDataChartCache = new LRUCache({
+    ttlAutopurge: true,
+    ttl: 60 * 1000
+})
 
-    metricTrigger: async function (req, res) {
-        const svcAccessToken = checkSvcAccessToken(req);
+export async function metricTrigger(req, res, triggerName) {
+    const svcAccessToken = checkSvcAccessToken(req);
 
-        if (req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
-            const tzOffset = req.body.triggerFields.inverter_metric_id.split('|')[1],
-                nowLocalTzString = tzDateToISOString(Date.now(), tzOffset),
-                limitValue = Number(req.body.triggerFields.limit_value),
-                triggerData = [];
+    if (req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
+        let triggerDataLimit = req.body.limit;
+        if (typeof triggerDataLimit === "undefined") {
+            triggerDataLimit = 50;
+        }
 
-            let triggerDataLimit = req.body.limit;
-            if (typeof triggerDataLimit === "undefined") {
-                triggerDataLimit = 50;
-            }
+        const triggerData = [];
+        // if (req.get('X-IFTTT-Realtime') === '1') {
+        const tzOffset = req.body.triggerFields.inverter_metric_id.split('|')[1],
+            limitValue = Number(req.body.triggerFields.limit_value);
 
-            const semsRespBody = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/HistoryData/GetStationHistoryDataChart', { Token: svcAccessToken },
-                createGetStationHistoryDataChartPayload(req.body.triggerFields.inverter_metric_id, nowLocalTzString));
-            checkResponseCode(semsRespBody);
+        const semsRespBody = await getStationHistoryDataChart(req.body.triggerFields, svcAccessToken);
 
-            const semsData = semsRespBody.data.list?.[0].inverters?.[0].targets?.[0].datas;
-            if (semsData) {
+        const semsData = semsRespBody.data.list?.[0].inverters?.[0].targets?.[0].datas;
+        if (semsData && semsData.length > 0) {
+            const lastValue = Number(semsData.at(-1).value);
+            if (isMetricLimitSatisfied(triggerName, lastValue, limitValue)) {
+                // always return fresh triggerData only
+                // when the metric is volatile, this avoids getting stuck in the wrong state in case one trigger type overtakes the other
+                // v1^3v2 or ^1v3^2 - when no.3 is being processed after no.2, better do not return triggerData at all
+
                 for (let i = semsData.length - 1; i > 0 && triggerData.length < triggerDataLimit; i--) {
                     const currValue = Number(semsData[i].value),
                         prevValue = Number(semsData[i - 1].value);
 
-                    if ((req.path.endsWith('/metric_exceeds_limit') && currValue > limitValue && prevValue <= limitValue)
-                        || (req.path.endsWith('/metric_drops_below_limit') && currValue < limitValue && prevValue >= limitValue)) {
-
+                    if (isMetricLimitCrossed(triggerName, currValue, prevValue, limitValue)) {
                         triggerData.push(createIFTTTTriggerData(semsRespBody, semsData[i], limitValue, tzOffset));
                     }
                 }
             }
-
-            if (req.get('IFTTT-Test-Mode')) {
-                // when being tested, top the data with fakes up to 3 items
-                for (let i = 0; triggerData.length < triggerDataLimit && triggerData.length < 3; i++) {
-                    const semsData = { stat_date: '12/24/2024 20:00', value: -1 * i };
-                    triggerData.push(createIFTTTTriggerData(semsRespBody, semsData, limitValue, tzOffset));
-                }
-            }
-
-            res.status(200).send({
-                data: triggerData
-            });
-        } else {
-            respondBadRequest(res, "Some trigger fields missing");
         }
-    },
+        // }
 
-    inverterMetricTriggerOptions: async function (req, res) {
-        const svcAccessToken = checkSvcAccessToken(req);
-        const inverterOptionsData = [];
-
-        const semsRespBody = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/PowerStationMonitor/QueryPowerStationMonitor', { Token: svcAccessToken }, createQueryPowerStationMonitorPayload());
-        checkResponseCode(semsRespBody);
-
-        if (semsRespBody.data.list) {
-            for (const ps of semsRespBody.data.list) {
-                const semsRespBody2 = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v2/PowerStation/GetMonitorDetailByPowerstationId', { Token: svcAccessToken }, createGetMonitorDetailByPowerstationIdPayload(ps.powerstation_id));
-                checkResponseCode(semsRespBody);
-
-                const powerStationTz = find(ps.latitude, ps.longitude);
-                const powerStationTzOffset = getOffsetFromTz(powerStationTz);
-
-                semsRespBody2.data.inverter?.forEach((i) => {
-                    const metricOptionsData = [];
-                    i.points?.forEach((t) => {
-                        metricOptionsData.push(createMetricIFTTTOptionsData(ps.powerstation_id, powerStationTzOffset, i.sn, t.target_index, t.target_key, t.display));
-                    });
-                    inverterOptionsData.push(createInverterIFTTTOptionsData(ps.stationname, i.name, metricOptionsData));
-                });
+        if (req.get('IFTTT-Test-Mode') === '1') {
+            // when being tested, top the data with fakes up to 3 items
+            for (let i = 0; triggerData.length < triggerDataLimit && triggerData.length < 3; i++) {
+                const semsData = { stat_date: '12/24/2024 20:00', value: -1 * i };
+                triggerData.push(createIFTTTTriggerData(semsRespBody, semsData, limitValue, tzOffset));
             }
         }
 
         res.status(200).send({
-            data: inverterOptionsData
+            data: triggerData
         });
+    } else {
+        respondBadRequest(res, "Some trigger fields missing");
+    }
+}
+
+function isMetricLimitSatisfied(triggerName, metricCurrentValue, limitValue) {
+    return isMetricLimitCrossed(triggerName, metricCurrentValue, limitValue, limitValue);
+}
+
+export function isMetricLimitCrossed(triggerName, metricCurrentValue, metricPreviousValue, limitValue) {
+    return ((triggerName === 'metric_exceeds_limit' && metricCurrentValue != null && metricCurrentValue > limitValue && metricPreviousValue != null && metricPreviousValue <= limitValue)
+        || (triggerName === 'metric_drops_below_limit' && metricCurrentValue != null && metricCurrentValue < limitValue && metricPreviousValue != null && metricPreviousValue >= limitValue));
+}
+
+/**
+ * implements a key-based locking cache that avoids request duplication
+ */
+export async function getStationHistoryDataChart(triggerFields, svcAccessToken) {
+    if (!getStationHistoryDataChartCache.has(triggerFields.inverter_metric_id)) {
+        console.log(`${triggerFields.inverter_metric_id}: cache missed, waiting for acquiring lock`);
+        await cacheLock.acquire(triggerFields.inverter_metric_id, async (done) => {
+            console.log(`${triggerFields.inverter_metric_id}: lock acquired`);
+            let res, err;
+
+            if (!getStationHistoryDataChartCache.has(triggerFields.inverter_metric_id)) {
+                const tzOffset = triggerFields.inverter_metric_id.split('|')[1],
+                    nowLocalTzString = tzDateToISOString(Date.now(), tzOffset);
+
+                try {
+                    res = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/HistoryData/GetStationHistoryDataChart', { Token: svcAccessToken },
+                        createGetStationHistoryDataChartPayload(triggerFields.inverter_metric_id, nowLocalTzString));
+                    checkResponseCode(res);
+                    const data = res.data.list?.[0].inverters?.[0].targets?.[0].datas;
+                    console.log('lastData:', (data && data.length > 0) ? data.at(-1) : 'unavailable');
+                    getStationHistoryDataChartCache.set(triggerFields.inverter_metric_id, res);
+                } catch (e) {
+                    err = e;
+                }
+            } else {
+                console.log(`${triggerFields.inverter_metric_id}: cache key fetched by another request`);
+            }
+            done(err, res);
+        }).then((res) => {
+            console.log(`${triggerFields.inverter_metric_id}: lock released`);
+        }, (err) => {
+            console.error(`${triggerFields.inverter_metric_id}: ${err.message}`);
+            throw err;
+        });
+    } else {
+        console.log(`${triggerFields.inverter_metric_id}: cache hit`);
+    }
+    return getStationHistoryDataChartCache.get(triggerFields.inverter_metric_id);
+}
+
+export async function metricTriggerOptions(req, res) {
+    const svcAccessToken = checkSvcAccessToken(req);
+    const inverterOptionsData = [];
+
+    const semsRespBody = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/PowerStationMonitor/QueryPowerStationMonitor', { Token: svcAccessToken }, createQueryPowerStationMonitorPayload());
+    checkResponseCode(semsRespBody);
+
+    if (semsRespBody.data.list) {
+        for (const ps of semsRespBody.data.list) {
+            const semsRespBody2 = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v2/PowerStation/GetMonitorDetailByPowerstationId', { Token: svcAccessToken }, createGetMonitorDetailByPowerstationIdPayload(ps.powerstation_id));
+            checkResponseCode(semsRespBody);
+
+            const powerStationTz = find(ps.latitude, ps.longitude);
+            const powerStationTzOffset = getOffsetFromTz(powerStationTz);
+
+            semsRespBody2.data.inverter?.forEach((i) => {
+                const metricOptionsData = [];
+                i.points?.forEach((t) => {
+                    metricOptionsData.push(createMetricIFTTTOptionsData(ps.powerstation_id, powerStationTzOffset, i.sn, t.target_index, t.target_key, t.display));
+                });
+                inverterOptionsData.push(createInverterIFTTTOptionsData(ps.stationname, i.name, metricOptionsData));
+            });
+        }
     }
 
+    res.status(200).send({
+        data: inverterOptionsData
+    });
+}
+
+export function cacheStats() {
+    return {
+        count: getStationHistoryDataChartCache.size,
+        size: getStationHistoryDataChartCache.calculatedSize
+    };
 }
 
 function createIFTTTTriggerData(semsRespBody, semsData, limitValue, tzOffset) {
