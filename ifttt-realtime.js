@@ -1,11 +1,9 @@
 import { callHttpJson } from './helper.js';
 import getUuid from 'uuid-by-string';
 
-const IFTTT_SERVICE_KEY = process.env.IFTTT_SERVICE_KEY;
-
 export async function notifyIFTTT(triggerIds) {
     if (triggerIds?.length) {
-        await callHttpJson('POST', 'https://realtime.ifttt.com/v1/notifications', { 'IFTTT-Service-Key': String(IFTTT_SERVICE_KEY), 'X-Request-ID': getUuid(JSON.stringify(triggerIds)) },
+        await callHttpJson('POST', 'https://realtime.ifttt.com/v1/notifications', { 'IFTTT-Service-Key': process.env.IFTTT_SERVICE_KEY, 'X-Request-ID': getUuid(JSON.stringify(triggerIds)) },
             createRealtimeNotificationPayload(triggerIds));
     }
 }

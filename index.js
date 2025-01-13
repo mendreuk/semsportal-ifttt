@@ -3,8 +3,6 @@ import { auth } from 'express-oauth2-jwt-bearer';
 import { trigger, triggerOptions, getStationHistoryCurrentData, isMetricLimitCrossed } from './semsportal.js';
 import { notifyIFTTT } from './ifttt-realtime.js';
 
-const IFTTT_SERVICE_KEY = process.env.IFTTT_SERVICE_KEY;
-
 const jobs = {}; // inverterId -> timeout
 const triggerData = {}; // triggerId -> trigger data object
 const triggerIds = {}; // inverterId -> set of triggerIds
@@ -21,7 +19,7 @@ process.on('exit', function () {
 });
 
 function serviceKeyCheck(req, res, next) {
-    if (IFTTT_SERVICE_KEY !== req.get("IFTTT-Service-Key")) {
+    if (process.env.IFTTT_SERVICE_KEY !== req.get("IFTTT-Service-Key")) {
         const err = Error('Invalid service key');
         err.status = 401;
         next(err);
@@ -157,8 +155,7 @@ function stats() {
     const stats = {
         users: Object.keys(svcAccessTokens).length,
         jobs: Object.keys(jobs).length,
-        triggers: Object.keys(triggerData).length,
-        triggers_by_inverter: triggerIds
+        triggers: Object.keys(triggerData).length
     };
     console.log('stats: ', stats);
     return stats;
@@ -203,18 +200,30 @@ async function inverterJob(inverterId, lastCheckTime, userId) {
         const uniqueMetricIds = [...new Set(metricIds)];
         const targets = await getStationHistoryCurrentData(inverterId, uniqueMetricIds, lastCheckTime, svcAccessTokens[userId]);
 
-        triggerIdsToNotify = tIds.filter((tId) => {
-            const tData = triggerData[tId];
-            const targetKey = tData.triggerFields.inverter_metric_id.split('&')[1].split('|')[1];
-            const target = targets.find((t) => targetKey === t.target_key);
-            const currentData = target?.datas?.at(-1);
-            console.log(`current ${target?.target_name} data: ${currentData ? JSON.stringify(currentData) : 'unavailable'}`);
-            const ret = isMetricLimitCrossed(tData.triggerName, currentData?.value, tData.metricLastValue, Number(tData.triggerFields.limit_value));
-            console.log('isMetricLimitCrossed:', tData.triggerName, currentData?.value, tData.metricLastValue, Number(tData.triggerFields.limit_value), ret);
-            tData.metricLastValue = currentData?.value;
-            lastCheckTime = currentData?.stat_date;
-            return ret;
-        });
+        if (targets) {
+            targets.forEach((t) => {
+                const currentData = t.datas?.at(-1);
+                console.log(`current ${t.target_name} data: ${currentData ? JSON.stringify(currentData) : 'unavailable'}`);
+            });
+
+            triggerIdsToNotify = tIds.filter((tId) => {
+                const tData = triggerData[tId];
+                const targetKey = tData.triggerFields.inverter_metric_id.split('&')[1].split('|')[1];
+                const target = targets.find((t) => targetKey === t.target_key);
+                const currentData = target?.datas?.at(-1);
+                const ret = isMetricLimitCrossed(tData.triggerName, currentData?.value, tData.metricLastValue, Number(tData.triggerFields.limit_value));
+                console.log('isMetricLimitCrossed:', tData.triggerName, currentData?.value, tData.metricLastValue, Number(tData.triggerFields.limit_value), ret);
+                if (ret && currentData?.value === tData.metricLastValue) {
+                    // when the metric lands on the limit but bounces back above, this prevents triggering metric_exceeded without previously triggering metric_dropped_below (and vice versa)
+                    ret = false;
+                    console.log('metric is right on the limit, withholding the notification and waiting for the next data to decide');
+                } else {
+                    tData.metricLastValue = currentData?.value;
+                    lastCheckTime = currentData?.stat_date;
+                }
+                return ret;
+            });
+        }
     } catch (e) {
         if (e.status == 401) {
             console.log(`${inverterId}: notifying in order to refresh access token`);

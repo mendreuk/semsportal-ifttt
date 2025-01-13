@@ -74,7 +74,6 @@ export async function getStationHistoryCurrentData(inverterId, metricIds, lastCh
     const startTime = (lastCheckTime) ? new Date(lastCheckTime).toISOString().slice(0, 16) : nowLocalTzString.slice(0, 10) + ' 00:00';
     const endTime = nowLocalTzString.slice(0, 10) + ' 23:59';
     console.log('startTime:', startTime);
-    console.log('endTime:', endTime);
 
     const semsRespBody = await getStationHistoryDataChart(inverterId, metricIds, svcAccessToken, startTime, endTime);
     return semsRespBody?.data?.list?.[0].inverters?.[0].targets;
@@ -124,7 +123,7 @@ function createIFTTTTriggerData(semsRespBody, semsData, limitValue, tzOffset) {
         metric: semsRespBody.data.list[0].inverters[0].targets[0].target_name,
         unit: semsRespBody.data.list[0].inverters[0].targets[0].target_unit,
         limit_value: limitValue,
-        current_value: Math.round(semsData.value),
+        current_value: Math.floor(semsData.value) == semsData.value ? Math.floor(semsData.value) : semsData.value,
         meta: {
             id: getUuid(JSON.stringify(semsData)), // a unique identifier used to prevent Applets from firing more than once on the same item
             timestamp: Date.parse(semsData.stat_date + tzOffset) / 1000 // metas must be in descending order by the timestamp (in Unix seconds)
@@ -145,7 +144,7 @@ function createGetStationHistoryDataChartPayload(inverterId, metricIds, startTim
     return {
         qry_time_start: startTime,
         qry_time_end: endTime,
-        times: Math.floor(Math.random() * 32767) + 32767, // makes request body unique and thus avoids caching (header Cache-Control: no-cache is ignored) // TODO nastavit range
+        times: Math.floor(Math.random() * 65535), // makes the request body unique and forces no caching (header Cache-Control: no-cache is ignored)
         pws_historys: [{
             id: powerStationId,
             inverters: [{
