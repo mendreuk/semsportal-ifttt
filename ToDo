@@ -1,9 +1,10 @@
-- udelat log debug(), ktera bude logovat jen s process.env.DEBUG=true
-- udelat stat(), ktera bude vypisovat stat cache a timeoutu a volat ji nekde periodicky a taky na /status
-- v logu se objevovalo 429 (dosly instance), protoze mam nastaveno max 1 - mozna to ale bylo jen kvuli castym redeployum
-- predeployovat do jineho regionu s Tier1
-- pri volani sems pouzit hlavicku Cache-control: no-cache asi misto toho random cisla
 - udelat hledani sekundy pro dotaz na sems pomoci binarniho puleni (souvisi s validacnim timeoutem zaznamu v cache)
+- logovani
+    -? udelat log debug(), ktera bude logovat jen s process.env.DEBUG=true
+    - budu potrebovat filtrovat logy podle userId, triggerId, inverterId(jobId), metricId - vyzkoumat, jestli to jde pridat do metadat
+
+- v logu se objevovalo 429 (dosly instance), protoze mam nastaveno max 1 - mozna to ale bylo jen kvuli castym redeployum
+- po mesici rozumneho trafiku zkusit nechat Recommender vyhodnotit, jestli neprejit na instance-based billing, mozna pro me bude vhodnejsi https://cloud.google.com/run/docs/configuring/billing-settings?hl=en
 - pri review pred nasazenim do produ mozna bude problem s prihlasovanim https://ifttt.com/docs/guidelines#authentication
 
 + google cloud run instance bezi vzdy v UTC nezavisle na regionu, kde jsou nadeployovane

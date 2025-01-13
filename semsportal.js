@@ -1,18 +1,10 @@
 import { callHttpJson, throwError } from './helper.js';
 import getUuid from 'uuid-by-string';
 import { find } from 'geo-tz';
-import { LRUCache } from 'lru-cache';
-import AsyncLock from 'async-lock';
 
 const SEMS_PORTAL_API_BASEURL = 'https://eu.semsportal.com/api/';
 
-const cacheLock = new AsyncLock();
-const getStationHistoryDataChartCache = new LRUCache({
-    ttlAutopurge: true,
-    ttl: 60 * 1000
-})
-
-export async function metricTrigger(req, res, triggerName) {
+export async function trigger(req, res) {
     const svcAccessToken = checkSvcAccessToken(req);
 
     if (req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
@@ -22,15 +14,19 @@ export async function metricTrigger(req, res, triggerName) {
         }
 
         const triggerData = [];
-        // if (req.get('X-IFTTT-Realtime') === '1') {
-        const tzOffset = req.body.triggerFields.inverter_metric_id.split('|')[1],
-            limitValue = Number(req.body.triggerFields.limit_value);
+        const [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
+        const tzOffset = inverterId.split('|')[1];
+        const nowLocalTzString = tzDateToISOString(Date.now(), tzOffset);
+        const startTime = nowLocalTzString.slice(0, 10) + ' 00:00';
+        const endTime = nowLocalTzString.slice(0, 10) + ' 23:59';
 
-        const semsRespBody = await getStationHistoryDataChart(req.body.triggerFields, svcAccessToken);
+        const semsRespBody = await getStationHistoryDataChart(inverterId, [metricId], svcAccessToken, startTime, endTime);
 
         const semsData = semsRespBody.data.list?.[0].inverters?.[0].targets?.[0].datas;
         if (semsData && semsData.length > 0) {
+            const triggerName = getTriggerName(req);
             const lastValue = Number(semsData.at(-1).value);
+            const limitValue = Number(req.body.triggerFields.limit_value);
             if (isMetricLimitSatisfied(triggerName, lastValue, limitValue)) {
                 // always return fresh triggerData only
                 // when the metric is volatile, this avoids getting stuck in the wrong state in case one trigger type overtakes the other
@@ -46,7 +42,6 @@ export async function metricTrigger(req, res, triggerName) {
                 }
             }
         }
-        // }
 
         if (req.get('IFTTT-Test-Mode') === '1') {
             // when being tested, top the data with fakes up to 3 items
@@ -73,47 +68,26 @@ export function isMetricLimitCrossed(triggerName, metricCurrentValue, metricPrev
         || (triggerName === 'metric_drops_below_limit' && metricCurrentValue != null && metricCurrentValue < limitValue && metricPreviousValue != null && metricPreviousValue >= limitValue));
 }
 
-/**
- * implements a key-based locking cache that avoids request duplication
- */
-export async function getStationHistoryDataChart(triggerFields, svcAccessToken) {
-    if (!getStationHistoryDataChartCache.has(triggerFields.inverter_metric_id)) {
-        console.log(`${triggerFields.inverter_metric_id}: cache missed, waiting for acquiring lock`);
-        await cacheLock.acquire(triggerFields.inverter_metric_id, async (done) => {
-            console.log(`${triggerFields.inverter_metric_id}: lock acquired`);
-            let res, err;
+export async function getStationHistoryCurrentData(inverterId, metricIds, lastCheckTime, svcAccessToken) {
+    const tzOffset = inverterId.split('|')[1];
+    const nowLocalTzString = tzDateToISOString(Date.now(), tzOffset);
+    const startTime = (lastCheckTime) ? new Date(lastCheckTime).toISOString().slice(0, 16) : nowLocalTzString.slice(0, 10) + ' 00:00';
+    const endTime = nowLocalTzString.slice(0, 10) + ' 23:59';
+    console.log('startTime:', startTime);
+    console.log('endTime:', endTime);
 
-            if (!getStationHistoryDataChartCache.has(triggerFields.inverter_metric_id)) {
-                const tzOffset = triggerFields.inverter_metric_id.split('|')[1],
-                    nowLocalTzString = tzDateToISOString(Date.now(), tzOffset);
-
-                try {
-                    res = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/HistoryData/GetStationHistoryDataChart', { Token: svcAccessToken },
-                        createGetStationHistoryDataChartPayload(triggerFields.inverter_metric_id, nowLocalTzString));
-                    checkResponseCode(res);
-                    const data = res.data.list?.[0].inverters?.[0].targets?.[0].datas;
-                    console.log('lastData:', (data && data.length > 0) ? data.at(-1) : 'unavailable');
-                    getStationHistoryDataChartCache.set(triggerFields.inverter_metric_id, res);
-                } catch (e) {
-                    err = e;
-                }
-            } else {
-                console.log(`${triggerFields.inverter_metric_id}: cache key fetched by another request`);
-            }
-            done(err, res);
-        }).then((res) => {
-            console.log(`${triggerFields.inverter_metric_id}: lock released`);
-        }, (err) => {
-            console.error(`${triggerFields.inverter_metric_id}: ${err.message}`);
-            throw err;
-        });
-    } else {
-        console.log(`${triggerFields.inverter_metric_id}: cache hit`);
-    }
-    return getStationHistoryDataChartCache.get(triggerFields.inverter_metric_id);
+    const semsRespBody = await getStationHistoryDataChart(inverterId, metricIds, svcAccessToken, startTime, endTime);
+    return semsRespBody?.data?.list?.[0].inverters?.[0].targets;
 }
 
-export async function metricTriggerOptions(req, res) {
+async function getStationHistoryDataChart(inverterId, metricIds, svcAccessToken, startTime, endTime) {
+    const semsRespBody = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/HistoryData/GetStationHistoryDataChart', { Token: svcAccessToken },
+        createGetStationHistoryDataChartPayload(inverterId, metricIds, startTime, endTime));
+    checkResponseCode(semsRespBody);
+    return semsRespBody;
+}
+
+export async function triggerOptions(req, res) {
     const svcAccessToken = checkSvcAccessToken(req);
     const inverterOptionsData = [];
 
@@ -143,13 +117,6 @@ export async function metricTriggerOptions(req, res) {
     });
 }
 
-export function cacheStats() {
-    return {
-        count: getStationHistoryDataChartCache.size,
-        size: getStationHistoryDataChartCache.calculatedSize
-    };
-}
-
 function createIFTTTTriggerData(semsRespBody, semsData, limitValue, tzOffset) {
     return {
         created_at: new Date(semsData.stat_date + tzOffset).toISOString(), // must be ISO8601 in UTC
@@ -159,29 +126,33 @@ function createIFTTTTriggerData(semsRespBody, semsData, limitValue, tzOffset) {
         limit_value: limitValue,
         current_value: Math.round(semsData.value),
         meta: {
-            id: generateTriggerMetaId(JSON.stringify(semsData)), // a unique identifier used to prevent Applets from firing more than once on the same item
+            id: getUuid(JSON.stringify(semsData)), // a unique identifier used to prevent Applets from firing more than once on the same item
             timestamp: Date.parse(semsData.stat_date + tzOffset) / 1000 // metas must be in descending order by the timestamp (in Unix seconds)
         }
     };
 }
 
-function createGetStationHistoryDataChartPayload(inverter_metric_id, nowLocalTzString) {
-    const [powerStationId, powerStationTzOffset, inverterSn, targetIndex, targetKey] = inverter_metric_id.split('|');
+function createGetStationHistoryDataChartPayload(inverterId, metricIds, startTime, endTime) {
+    const targets = metricIds.map((mId) => {
+        const [targetIndex, targetKey] = mId.split('|');
+        return {
+            target_key: targetKey,
+            target_index: Number(targetIndex)
+        }
+    });
 
+    const [powerStationId, powerStationTzOffset, inverterSn] = inverterId.split('|');
     return {
-        qry_time_start: nowLocalTzString.slice(0, 10) + ' 00:00',
-        qry_time_end: nowLocalTzString.slice(0, 10) + ' 23:59',
-        times: Math.floor(Math.random() * Number.MAX_SAFE_INTEGER), // makes request body unique and thus avoids caching
+        qry_time_start: startTime,
+        qry_time_end: endTime,
+        times: Math.floor(Math.random() * 32767) + 32767, // makes request body unique and thus avoids caching (header Cache-Control: no-cache is ignored) // TODO nastavit range
         pws_historys: [{
             id: powerStationId,
             inverters: [{
                 sn: inverterSn
             }]
         }],
-        targets: [{
-            target_key: targetKey,
-            target_index: Number(targetIndex)
-        }]
+        targets: targets
     };
 }
 
@@ -208,12 +179,12 @@ function createInverterIFTTTOptionsData(powerStationName, inverterName, metricOp
 function createMetricIFTTTOptionsData(powerStationId, powerStationTzOffset, inverterSn, targetIndex, targetKey, targetName) {
     return {
         label: targetIndex + "  " + targetName,
-        value: powerStationId + "|" + powerStationTzOffset + "|" + inverterSn + "|" + targetIndex + "|" + targetKey
+        value: powerStationId + "|" + powerStationTzOffset + "|" + inverterSn + "&" + targetIndex + "|" + targetKey
     };
 }
 
-function generateTriggerMetaId(name) {
-    return getUuid(name);
+function getTriggerName(req) {
+    return req.path.substring(req.path.lastIndexOf('/') + 1);
 }
 
 function getOffsetFromTz(timeZone = 'UTC', date = new Date()) {

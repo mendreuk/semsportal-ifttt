@@ -10,8 +10,6 @@
         "express-promise-router": "^4.1.1",
         "express-oauth2-jwt-bearer": "^1.6.0",
         "uuid-by-string": "^4.0.0",
-        "geo-tz": "^8.1.2",
-        "lru-cache": "^11.0.2",
-        "async-lock": "^1.4.1"
+        "geo-tz": "^8.1.2"
     }
 }
