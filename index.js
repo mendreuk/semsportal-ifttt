@@ -57,7 +57,7 @@ function registerTrigger(req, res, next) {
     triggerIds[inverterId].add(triggerId);
 
     if (!jobs[inverterId]) {
-        scheduleInverterJob(inverterId, null, userId);
+        scheduleInverterJob(inverterId, null, userId, Date.now());
         console.log(`${inverterId}: job has been registered`);
     }
 
@@ -184,13 +184,14 @@ function getSvcToken(req) {
     return req.auth.payload['https://ifttt.com/semsportal/svc_access_token'];
 }
 
-function scheduleInverterJob(inverterId, lastCheckTime, userId) {
-    const delaySec = 60;
-    console.log(`${inverterId}: scheduling job in ${delaySec}s`);
-    jobs[inverterId] = setTimeout(inverterJob, delaySec * 1000, inverterId, lastCheckTime, userId);
+function scheduleInverterJob(inverterId, lastCheckTime, userId, jobStartTime) {
+    const delayMs = 60 * 1000 - (Date.now() - jobStartTime);
+    console.log(`${inverterId}: scheduling job in ${Math.round(delayMs / 10) / 100}s`);
+    jobs[inverterId] = setTimeout(inverterJob, delayMs, inverterId, lastCheckTime, userId);
 }
 
 async function inverterJob(inverterId, lastCheckTime, userId) {
+    const jobStartTime = Date.now();
     console.log(`${inverterId}: job started`);
     const tIds = Array.from(triggerIds[inverterId]);
     let triggerIdsToNotify = null;
@@ -210,12 +211,13 @@ async function inverterJob(inverterId, lastCheckTime, userId) {
                 const tData = triggerData[tId];
                 const targetKey = tData.triggerFields.inverter_metric_id.split('&')[1].split('|')[1];
                 const target = targets.find((t) => targetKey === t.target_key);
+                
                 const currentData = target?.datas?.at(-1);
-                const ret = isMetricLimitCrossed(tData.triggerName, currentData?.value, tData.metricLastValue, Number(tData.triggerFields.limit_value));
-                console.log('isMetricLimitCrossed:', tData.triggerName, currentData?.value, tData.metricLastValue, Number(tData.triggerFields.limit_value), ret);
-                if (ret && currentData?.value === tData.metricLastValue) {
+                const ret = isMetricLimitCrossed(tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value);
+                console.log('isMetricLimitCrossed:', tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value, ret);
+
+                if (currentData?.value == tData.triggerFields.limit_value) {
                     // when the metric lands on the limit but bounces back above, this prevents triggering metric_exceeded without previously triggering metric_dropped_below (and vice versa)
-                    ret = false;
                     console.log('metric is right on the limit, withholding the notification and waiting for the next data to decide');
                 } else {
                     tData.metricLastValue = currentData?.value;
@@ -232,7 +234,7 @@ async function inverterJob(inverterId, lastCheckTime, userId) {
             throw e;
         }
     } finally {
-        scheduleInverterJob(inverterId, lastCheckTime, userId);
+        scheduleInverterJob(inverterId, lastCheckTime, userId, jobStartTime);
     }
 
     console.log('triggerIdsToNotify:', triggerIdsToNotify);

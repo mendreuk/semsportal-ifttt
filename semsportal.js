@@ -25,19 +25,14 @@ export async function trigger(req, res) {
         const semsData = semsRespBody.data.list?.[0].inverters?.[0].targets?.[0].datas;
         if (semsData && semsData.length > 0) {
             const triggerName = getTriggerName(req);
-            const lastValue = Number(semsData.at(-1).value);
-            const limitValue = Number(req.body.triggerFields.limit_value);
-            if (isMetricLimitSatisfied(triggerName, lastValue, limitValue)) {
+            if (isMetricLimitSatisfied(triggerName, semsData.at(-1).value, req.body.triggerFields.limit_value)) {
                 // always return fresh triggerData only
                 // when the metric is volatile, this avoids getting stuck in the wrong state in case one trigger type overtakes the other
                 // v1^3v2 or ^1v3^2 - when no.3 is being processed after no.2, better do not return triggerData at all
 
                 for (let i = semsData.length - 1; i > 0 && triggerData.length < triggerDataLimit; i--) {
-                    const currValue = Number(semsData[i].value),
-                        prevValue = Number(semsData[i - 1].value);
-
-                    if (isMetricLimitCrossed(triggerName, currValue, prevValue, limitValue)) {
-                        triggerData.push(createIFTTTTriggerData(semsRespBody, semsData[i], limitValue, tzOffset));
+                    if (isMetricLimitCrossed(triggerName, semsData[i].value, semsData[i - 1].value, req.body.triggerFields.limit_value)) {
+                        triggerData.push(createIFTTTTriggerData(semsRespBody, semsData[i], req.body.triggerFields.limit_value, tzOffset));
                     }
                 }
             }
@@ -64,8 +59,11 @@ function isMetricLimitSatisfied(triggerName, metricCurrentValue, limitValue) {
 }
 
 export function isMetricLimitCrossed(triggerName, metricCurrentValue, metricPreviousValue, limitValue) {
-    return ((triggerName === 'metric_exceeds_limit' && metricCurrentValue != null && metricCurrentValue > limitValue && metricPreviousValue != null && metricPreviousValue <= limitValue)
-        || (triggerName === 'metric_drops_below_limit' && metricCurrentValue != null && metricCurrentValue < limitValue && metricPreviousValue != null && metricPreviousValue >= limitValue));
+    const metricCurrentValueNum = Number(metricCurrentValue),
+        metricPreviousValueNum = Number(metricPreviousValue),
+        limitValueNum = Number(limitValue);
+    return ((triggerName === 'metric_exceeds_limit' && metricCurrentValueNum != null && metricCurrentValueNum > limitValueNum && metricPreviousValueNum != null && metricPreviousValueNum <= limitValueNum)
+        || (triggerName === 'metric_drops_below_limit' && metricCurrentValueNum != null && metricCurrentValueNum < limitValueNum && metricPreviousValueNum != null && metricPreviousValueNum >= limitValueNum));
 }
 
 export async function getStationHistoryCurrentData(inverterId, metricIds, lastCheckTime, svcAccessToken) {
