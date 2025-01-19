@@ -1,14 +1,14 @@
-- udelat hledani sekundy pro dotaz na sems pomoci binarniho puleni (souvisi s validacnim timeoutem zaznamu v cache)
 - logovani
     -? udelat log debug(), ktera bude logovat jen s process.env.DEBUG=true
     - budu potrebovat filtrovat logy podle userId, triggerId, inverterId(jobId), metricId - vyzkoumat, jestli to jde pridat do metadat
 - po startu containeru by se mohl nacist seznam useru z auth0 a pro vsechny provolat notify, aby se tim nastartovaly timery, jinak IFTTT-neplatici budou cekat az hodinu na trigger
-- z nejake predpovedi pocasi bych zjistil vychod a zapad slunce a vetsinu metrik nedava smysl checkovat v noci
+-? z nejake predpovedi pocasi bych zjistil vychod a zapad slunce a vetsinu metrik nedava smysl checkovat v noci (mozna jsem vyresil hledanim sekundy stridace a prechodem do sleep rezimu)
 
 - v logu se objevovalo 429 (dosly instance), protoze mam nastaveno max 1 - mozna to ale bylo jen kvuli castym redeployum
 - po mesici rozumneho trafiku zkusit nechat Recommender vyhodnotit, jestli neprejit na instance-based billing, mozna pro me bude vhodnejsi https://cloud.google.com/run/docs/configuring/billing-settings?hl=en
 - pri review pred nasazenim do produ mozna bude problem s prihlasovanim https://ifttt.com/docs/guidelines#authentication
 
++ abych nemusel definovat limit pro parabolu, dala by se pouzit priblizovaci funkce se dvema asymptotama podobna arctan(x): y = (2.5 (x - 20)) / sqrt((x - 20)² + 10) + 2.5 (viz. https://www.geogebra.org/graphing)
 + google cloud run instance bezi vzdy v UTC nezavisle na regionu, kde jsou nadeployovane
 + auth0: na login strance umazat "Forgot password?" https://community.auth0.com/t/how-to-remove-the-forgot-password-link-from-the-new-universal-login-page/92554
 + triggeruju na hranu, ne na uroven

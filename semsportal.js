@@ -206,12 +206,17 @@ function checkSvcAccessToken(req) {
 }
 
 function checkResponseCode(semsRespBody) {
-    if (semsRespBody?.code == 0) {
-        return;
-    } else if (semsRespBody?.code >= 100000 && semsRespBody?.code <= 100002) {
-        throwError(401, 'SVC access token invalid');
-    } else {
-        throwError(502, 'Error received from SVC');
+    switch (semsRespBody?.code) {
+        case 0: // success
+            break;
+        case 100000:
+            throwError(401, 'System error');
+        case 100001:
+            throwError(401, 'Unknown error');
+        case 100002:
+            throwError(401, 'SVC access token expired');
+        default:
+            throwError(502, 'Error received from SVC');
     }
 }
 
