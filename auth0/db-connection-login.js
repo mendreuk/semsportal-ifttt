@@ -20,9 +20,11 @@ function login(email, password, callback) {
     callback(null, {
       user_id: body.data.uid,
       email: email,
-      user_metadata: {
-        svc_name: 'semsportal',
-        svc_password: Buffer.from(password).toString('base64')
+      app_metadata: {
+        auth: {
+          provider: 'semsportal',
+            password: Buffer.from(password).toString('base64')
+        }
       }
     });
   });

@@ -1,5 +1,9 @@
 import https from 'https';
 
+export function getUserFromToken(req) {
+    return req.auth.payload['https://ifttt.com/semsportal/user'];
+}
+
 export async function callHttpJson(method, url, headers, payload) {
     const options = {
         headers: {

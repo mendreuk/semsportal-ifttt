@@ -10,25 +10,49 @@ const NAMESPACE = "https://ifttt.com/semsportal/";
  * @param {PostLoginAPI} api - Interface whose methods can be used to change the behavior of the login.
  */
 exports.onExecutePostLogin = async (event, api) => {
-  const svcAccessToken = await refreshSvcAccessToken(event, api);
-  if (svcAccessToken) {
-    api.accessToken.setCustomClaim(NAMESPACE + 'svc_access_token', svcAccessToken);
-  }
-  api.accessToken.setCustomClaim(NAMESPACE + 'email', event.user.email);
+  const providerAccessToken = await refreshProviderAccessToken(event, api);
+  const userClaim = getUserClaim(event, providerAccessToken);
+  api.accessToken.setCustomClaim(NAMESPACE + 'user', userClaim);
 };
 
-async function refreshSvcAccessToken(event, api) {
+/**
+ * @param {Event} event - Details about the user and the context in which they are logging in.
+* @param {string | null} providerAccessToken
+*/
+function getUserClaim(event, providerAccessToken) {
+  const u = {};
+  u.email = event.user.email;
+  if (providerAccessToken) {
+    u.auth = {};
+    u.auth.access_token = providerAccessToken;
+  }
+  if (event.user.app_metadata.subscription?.plan) {
+    u.subscription = {};
+    u.subscription.created_at = event.user.app_metadata.subscription.created_at;
+    u.subscription.expires_at = event.user.app_metadata.subscription.expires_at;
+    u.subscription.plan = event.user.app_metadata.subscription.plan;
+  }
+  return u;
+}
+
+/**
+* @param {Event} event - Details about the user and the context in which they are logging in.
+* @param {PostLoginAPI} api
+*/
+async function refreshProviderAccessToken(event, api) {
   console.log('Refresh started');
+  const auth = event.user.app_metadata.auth;
   const tokenOptions = {
     method: 'POST',
     url: `https://eu.semsportal.com/api/v2/Common/CrossLogin`,
     headers: { 'Token': '{"version":"v3.1","client":"ios","language":"en"}' },
     data: {
       account: event.user.email,
-      pwd: Buffer.from(event.user.user_metadata.svc_password, 'base64').toString()
+      pwd: Buffer.from(auth.password, 'base64').toString()
     }
   };
   let status = '';
+
   const res = await axios.request(tokenOptions)
     .catch(function (error) {
       if (error.response) {
@@ -37,19 +61,21 @@ async function refreshSvcAccessToken(event, api) {
         status = error.message;
       }
     });
-  let svcAccessToken;
+
+  let providerAccessToken = null;
   if (res && res.data && res.data.code == 0) {
     status = 'OK';
-    svcAccessToken = Buffer.from(JSON.stringify(res.data.data)).toString('base64');
-    api.user.setUserMetadata('svc_access_token', svcAccessToken);
+    providerAccessToken = Buffer.from(JSON.stringify(res.data.data)).toString('base64');
   } else if (res && res.data) {
     status = res.data.code + " " + res.data.msg;
   }
   console.log('Returned', status);
-  api.user.setUserMetadata('svc_last_token_refresh', Date.now());
-  api.user.setUserMetadata('svc_last_status', status);
+  auth.access_token = providerAccessToken;
+  auth.last_status = status;
+  auth.last_status_created_at = Date.now();
+  api.user.setAppMetadata('auth', auth);
   console.log('Finished');
-  return svcAccessToken;
+  return providerAccessToken;
 }
 
 /**

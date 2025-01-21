@@ -1,12 +1,10 @@
-import { callHttpJson, throwError } from './helper.js';
+import { getUserFromToken, callHttpJson, throwError } from './helper.js';
 import getUuid from 'uuid-by-string';
 import { find } from 'geo-tz';
 
 const SEMS_PORTAL_API_BASEURL = 'https://eu.semsportal.com/api/';
 
-export async function trigger(req, res) {
-    const svcAccessToken = checkSvcAccessToken(req);
-
+async function trigger(req, res) {
     if (req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
         let triggerDataLimit = req.body.limit;
         if (typeof triggerDataLimit === "undefined") {
@@ -20,7 +18,7 @@ export async function trigger(req, res) {
         const startTime = nowLocalTzString.slice(0, 10) + ' 00:00';
         const endTime = nowLocalTzString.slice(0, 10) + ' 23:59';
 
-        const semsRespBody = await getStationHistoryDataChart(inverterId, [metricId], svcAccessToken, startTime, endTime);
+        const semsRespBody = await getStationHistoryDataChart(inverterId, [metricId], getUserFromToken(req).auth.access_token, startTime, endTime);
 
         const semsData = semsRespBody.data.list?.[0].inverters?.[0].targets?.[0].datas;
         if (semsData && semsData.length > 0) {
@@ -42,7 +40,7 @@ export async function trigger(req, res) {
             // when being tested, top the data with fakes up to 3 items
             for (let i = 0; triggerData.length < triggerDataLimit && triggerData.length < 3; i++) {
                 const semsData = { stat_date: '12/24/2024 20:00', value: -1 * i };
-                triggerData.push(createIFTTTTriggerData(semsRespBody, semsData, limitValue, tzOffset));
+                triggerData.push(createIFTTTTriggerData(semsRespBody, semsData, req.body.triggerFields.limit_value, tzOffset));
             }
         }
 
@@ -58,7 +56,7 @@ function isMetricLimitSatisfied(triggerName, metricCurrentValue, limitValue) {
     return isMetricLimitCrossed(triggerName, metricCurrentValue, limitValue, limitValue);
 }
 
-export function isMetricLimitCrossed(triggerName, metricCurrentValue, metricPreviousValue, limitValue) {
+function isMetricLimitCrossed(triggerName, metricCurrentValue, metricPreviousValue, limitValue) {
     const metricCurrentValueNum = Number(metricCurrentValue),
         metricPreviousValueNum = Number(metricPreviousValue),
         limitValueNum = Number(limitValue);
@@ -66,7 +64,7 @@ export function isMetricLimitCrossed(triggerName, metricCurrentValue, metricPrev
         || (triggerName === 'metric_drops_below_limit' && metricCurrentValueNum != null && metricCurrentValueNum < limitValueNum && metricPreviousValueNum != null && metricPreviousValueNum >= limitValueNum));
 }
 
-export async function getStationHistoryCurrentData(inverterId, metricIds, lastCheckTime, svcAccessToken) {
+async function getStationHistoryCurrentData(inverterId, metricIds, lastCheckTime, svcAccessToken) {
     const tzOffset = inverterId.split('|')[1];
     const nowLocalTzString = tzDateToISOString(Date.now(), tzOffset);
     const startTime = (lastCheckTime) ? new Date(lastCheckTime).toISOString().slice(0, 16) : nowLocalTzString.slice(0, 10) + ' 00:00';
@@ -84,16 +82,15 @@ async function getStationHistoryDataChart(inverterId, metricIds, svcAccessToken,
     return semsRespBody;
 }
 
-export async function triggerOptions(req, res) {
-    const svcAccessToken = checkSvcAccessToken(req);
+async function triggerOptions(req, res) {
     const inverterOptionsData = [];
 
-    const semsRespBody = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/PowerStationMonitor/QueryPowerStationMonitor', { Token: svcAccessToken }, createQueryPowerStationMonitorPayload());
+    const semsRespBody = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/PowerStationMonitor/QueryPowerStationMonitor', { Token: getUserFromToken(req).auth.access_token }, createQueryPowerStationMonitorPayload());
     checkResponseCode(semsRespBody);
 
     if (semsRespBody.data.list) {
         for (const ps of semsRespBody.data.list) {
-            const semsRespBody2 = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v2/PowerStation/GetMonitorDetailByPowerstationId', { Token: svcAccessToken }, createGetMonitorDetailByPowerstationIdPayload(ps.powerstation_id));
+            const semsRespBody2 = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v2/PowerStation/GetMonitorDetailByPowerstationId', { Token: getUserFromToken(req).auth.access_token }, createGetMonitorDetailByPowerstationIdPayload(ps.powerstation_id));
             checkResponseCode(semsRespBody);
 
             const powerStationTz = find(ps.latitude, ps.longitude);
@@ -197,26 +194,18 @@ function tzDateToISOString(timestamp, tzOffset = "+0000") {
     return new Date(timestamp + tzOffsetMinutes).toISOString().slice(0, -1) + tzOffset;
 }
 
-function checkSvcAccessToken(req) {
-    const svcAccessToken = req.auth.payload['https://ifttt.com/semsportal/svc_access_token'];
-    if (!svcAccessToken) {
-        throwError(401, 'SVC access token missing');
-    }
-    return svcAccessToken;
-}
-
 function checkResponseCode(semsRespBody) {
     switch (semsRespBody?.code) {
         case 0: // success
             break;
         case 100000:
-            throwError(401, 'System error');
+            throwError(401, 'Provider: System error');
         case 100001:
-            throwError(401, 'Unknown error');
+            throwError(401, 'Provider: Unknown authentication error');
         case 100002:
-            throwError(401, 'SVC access token expired');
+            throwError(401, 'Provider: Access token has expired');
         default:
-            throwError(502, 'Error received from SVC');
+            throwError(502, 'Provider: Unknown error');
     }
 }
 
@@ -227,3 +216,5 @@ function respondBadRequest(res, msg) {
         }]
     });
 }
+
+export default { trigger, triggerOptions, getStationHistoryCurrentData, isMetricLimitCrossed };

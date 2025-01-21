@@ -1,19 +1,20 @@
 import express from "express-promise-router";
-import { auth } from 'express-oauth2-jwt-bearer';
-import { trigger, triggerOptions, getStationHistoryCurrentData, isMetricLimitCrossed } from './semsportal.js';
-import { notifyIFTTT } from './ifttt-realtime.js';
+import { getUserFromToken } from './helper.js';
+import semsportal from './semsportal.js';
+import auth0 from './auth0.js';
+import ifttt from './ifttt-realtime.js';
+
+const JOB_FIXED_DELAY_MS = 60 * 1000; // TODO nekdo bude treba s 5-minutovym planem
+const JOB_ONE_TIME_OFFSET_MS = 5 * 1000;
+const JOB_ADVANCE_FN_COEFF = 1;
+const JOB_MAX_ADVANCE_MS = JOB_ONE_TIME_OFFSET_MS * 0.95;
+const JOB_STARTUP_CALLS_NUM = 999999;
+const JOB_SLEEP_DELAY_MS = 5 * 60 * 1000;
 
 const jobs = {}; // inverterId -> timeout
 const triggerData = {}; // triggerId -> trigger data object
 const triggerIds = {}; // inverterId -> set of triggerIds
-const svcAccessTokens = {}; // userId -> upstream service access token
-
-const JOB_FIXED_DELAY_MS = 60 * 1000;
-const JOB_ONE_TIME_OFFSET_MS = 5 * 1000;
-const JOB_ADVANCE_FN_COEFF = 1;
-const JOB_MAX_ADVANCE_MS = JOB_ONE_TIME_OFFSET_MS * 0.95;
-const JOB_STARTUP_CALLS_NUM = Math.ceil(Math.sqrt(JOB_MAX_ADVANCE_MS / JOB_ADVANCE_FN_COEFF));
-const JOB_SLEEP_DELAY_MS = 5 * 60 * 1000;
+const providerAccessTokens = {}; // userId -> provider access token
 
 export const api = express();
 
@@ -35,16 +36,23 @@ function serviceKeyCheck(req, res, next) {
     }
 }
 
-const jwtCheck = auth({
-    audience: 'semsportal-ifttt',
-    issuerBaseURL: 'https://dev-4wnwsvy10pt0430e.us.auth0.com/',
-    tokenSigningAlg: 'RS256'
-});
+function providerAccessTokenCheck(req, res, next) {
+    const providerAccessToken = getUserFromToken(req)?.auth?.access_token;
+    if (!providerAccessToken) {
+        const err = Error('Missing provider access token');
+        err.status = 401;
+        next(err);
+    } else {
+        next();
+    }
+}
 
 function registerTrigger(req, res, next) {
-    if (req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
+    const user = getUserFromToken(req);
+    console.log('subscriptionPlan:', user.subscription);
+    if (checkSubscriptionPlan(user.subscription) && req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
         const userId = getUserId(req);
-        svcAccessTokens[userId] = getSvcToken(req);
+        providerAccessTokens[userId] = getUserFromToken(req).auth.access_token;
 
         const [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
 
@@ -112,26 +120,45 @@ api.use(function responseLogger(req, res, next) {
 
 api.get('/ifttt/v1/status', serviceKeyCheck, status);
 api.post('/ifttt/v1/test/setup', serviceKeyCheck, testSetup);
-api.get('/ifttt/v1/user/info', jwtCheck, userInfo);
+api.get('/ifttt/v1/user/info', auth0.jwtCheck, userInfo);
 
-api.post('/ifttt/v1/triggers/metric_drops_below_limit', jwtCheck, registerTrigger, trigger);
-api.post('/ifttt/v1/triggers/metric_drops_below_limit/fields/inverter_metric_id/options', jwtCheck, triggerOptions);
-api.delete('/ifttt/v1/triggers/metric_drops_below_limit/trigger_identity/:triggerId', jwtCheck, deleteTrigger);
+api.post('/ifttt/v1/triggers/metric_drops_below_limit', auth0.jwtCheck, providerAccessTokenCheck, registerTrigger, semsportal.trigger);
+api.post('/ifttt/v1/triggers/metric_drops_below_limit/fields/inverter_metric_id/options', auth0.jwtCheck, providerAccessTokenCheck, semsportal.triggerOptions);
+api.delete('/ifttt/v1/triggers/metric_drops_below_limit/trigger_identity/:triggerId', auth0.jwtCheck, deleteTrigger);
 
-api.post('/ifttt/v1/triggers/metric_exceeds_limit', jwtCheck, registerTrigger, trigger);
-api.post('/ifttt/v1/triggers/metric_exceeds_limit/fields/inverter_metric_id/options', jwtCheck, triggerOptions);
-api.delete('/ifttt/v1/triggers/metric_exceeds_limit/trigger_identity/:triggerId', jwtCheck, deleteTrigger);
+api.post('/ifttt/v1/triggers/metric_exceeds_limit', auth0.jwtCheck, providerAccessTokenCheck, registerTrigger, semsportal.trigger);
+api.post('/ifttt/v1/triggers/metric_exceeds_limit/fields/inverter_metric_id/options', auth0.jwtCheck, providerAccessTokenCheck, semsportal.triggerOptions);
+api.delete('/ifttt/v1/triggers/metric_exceeds_limit/trigger_identity/:triggerId', auth0.jwtCheck, deleteTrigger);
 
 api.use(function errorHandler(err, req, res, next) {
     if (res.headersSent) {
         return next(err)
     }
+    console.error(err.stack);
     res.status(err.status || 500).send({
         "errors": [{
             "message": err.message
         }]
     });
 });
+
+startSubscribedUsersTriggers();
+
+async function startSubscribedUsersTriggers() {
+    const subscribedUsers = await auth0.getSubscribedUsers();
+    const subscribedUsersToStartJobs = subscribedUsers
+        .filter((user) => checkSubscriptionPlan(user.app_metadata?.subscription))
+        .map((user) => user.user_id);
+
+    console.log('subscribedUsersToStartJobs:', subscribedUsersToStartJobs);
+    ifttt.notify(subscribedUsersToStartJobs);
+}
+
+function checkSubscriptionPlan(subscription) {
+    return subscription !== null
+        && subscription.expires_at > Date.now()
+        && subscription.plan === 'check_every_minute';
+}
 
 function status(req, res) {
     res.send({ "status": "OK", stats: stats() });
@@ -162,7 +189,7 @@ function stats() {
     console.assert(equalSets(triggersFromTriggerId, Object.keys(triggerData)), "collections are inconsistent based on number of triggers %o", { triggerIds: triggersFromTriggerId, triggerData: Object.keys(triggerData) });
 
     const stats = {
-        users: Object.keys(svcAccessTokens).length,
+        users: Object.keys(providerAccessTokens).length,
         jobs: Object.keys(jobs).length,
         triggers: Object.keys(triggerData).length
     };
@@ -186,49 +213,36 @@ function getUserId(req) {
 }
 
 function getUserEmail(req) {
-    return req.auth.payload['https://ifttt.com/semsportal/email'];
-}
-
-function getSvcToken(req) {
-    return req.auth.payload['https://ifttt.com/semsportal/svc_access_token'];
+    return getUserFromToken(req).email;
 }
 
 function scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime, jobCallsNumSinceHit, lastJobStartTime) {
     console.log('currentCheckTime, lastCheckTime:', currentCheckTime, lastCheckTime);
-    let jobAdvanceMs = 0;
-    let jobTookMs = null;
-    let jobDelayMs = null;
 
-    if (isInverterUploadTimeHit(currentCheckTime, lastCheckTime)) {
-        if (jobCallsNumSinceHit == 1) {
-            console.log(`${inverterId}: inverter is probably shut down`);
-            jobCallsNumSinceHit = 0;
-            jobTookMs = Date.now() - lastJobStartTime;
-            jobDelayMs = JOB_SLEEP_DELAY_MS;
-        } else {
-            console.log(`${inverterId}: inverter upload time hit after ${jobCallsNumSinceHit} calls`);
-            jobCallsNumSinceHit = 0;
-            jobTookMs = Date.now() - lastJobStartTime;
-            jobDelayMs = JOB_FIXED_DELAY_MS - jobTookMs + JOB_ONE_TIME_OFFSET_MS;
-        }
-    } else {
-        jobAdvanceMs = countJobAdvance(jobCallsNumSinceHit);
-        jobTookMs = Date.now() - lastJobStartTime;
-        jobDelayMs = JOB_FIXED_DELAY_MS - jobTookMs - jobAdvanceMs;
-    }
-    // do no put any code here in order to keep jobDelayMs as precise as possible
-
-    jobs[inverterId] = setTimeout(inverterJob, jobDelayMs, userId, inverterId, currentCheckTime, jobCallsNumSinceHit + 1);
-    console.log(`${inverterId}: job took ${Math.round(jobTookMs / 10) / 100}s, planned advance ${jobAdvanceMs}s (after ${jobCallsNumSinceHit} calls since hit), next job scheduled in ${Math.round(jobDelayMs / 10) / 100}s`);
-}
-
-function isInverterUploadTimeHit(currentCheckTime, lastCheckTime) {
     // the time values are:
     // - undefined if no data is being returned since midnight until the morning
     // - some useful time during the daylight
     // - the last value measured when the inverter shuts down until the midnight
-    // - null when the sems service call timeouts ->ignore
-    return currentCheckTime === lastCheckTime && currentCheckTime != null && lastCheckTime != null;
+    // - null after startup or when the semsportal call timeouts (usually takes longer to recover)
+    let jobBaseDelayMs = JOB_FIXED_DELAY_MS;
+    if (currentCheckTime === lastCheckTime) {
+        if (jobCallsNumSinceHit == 1) {
+            console.log(`${inverterId}: inverter is probably shut down or semsportal is temporarily unavailable`);
+            jobBaseDelayMs = JOB_SLEEP_DELAY_MS;
+        } else if (jobCallsNumSinceHit != JOB_STARTUP_CALLS_NUM) {
+            console.log(`${inverterId}: inverter upload time hit after ${jobCallsNumSinceHit} calls`);
+            jobBaseDelayMs += JOB_ONE_TIME_OFFSET_MS;
+        }
+        jobCallsNumSinceHit = 0;
+    }
+
+    const jobAdvanceMs = countJobAdvance(jobCallsNumSinceHit);
+    const jobTookMs = Date.now() - lastJobStartTime;
+    const jobDelayMs = jobBaseDelayMs - jobTookMs - jobAdvanceMs;
+    // do no put any code here in order to keep jobDelayMs as precise as possible
+
+    jobs[inverterId] = setTimeout(inverterJob, jobDelayMs, userId, inverterId, currentCheckTime, jobCallsNumSinceHit + 1);
+    console.log(`${inverterId}: job took ${Math.round(jobTookMs / 10) / 100}s, planned advance ${jobAdvanceMs / 1000}s (after ${jobCallsNumSinceHit} calls since hit), next job scheduled in ${Math.round(jobDelayMs / 10) / 100}s`);
 }
 
 function countJobAdvance(callsNumSinceHit) {
@@ -239,13 +253,13 @@ async function inverterJob(userId, inverterId, lastCheckTime, callsNumSinceHit) 
     const jobStartTime = Date.now();
     console.log(`${inverterId}: job started`);
     const tIds = Array.from(triggerIds[inverterId]);
-    let triggerIdsToNotify = null;
+    let triggerIdsToNotify = [];
     let currentCheckTime = null;
 
     try {
         const metricIds = tIds.map((tId) => triggerData[tId].triggerFields.inverter_metric_id.split('&')[1]);
         const uniqueMetricIds = [...new Set(metricIds)];
-        const targets = await getStationHistoryCurrentData(inverterId, uniqueMetricIds, lastCheckTime, svcAccessTokens[userId]);
+        const targets = await semsportal.getStationHistoryCurrentData(inverterId, uniqueMetricIds, lastCheckTime, providerAccessTokens[userId]);
 
         if (targets) {
             targets.forEach((t) => {
@@ -259,7 +273,7 @@ async function inverterJob(userId, inverterId, lastCheckTime, callsNumSinceHit) 
                 const target = targets.find((t) => targetKey === t.target_key);
 
                 const currentData = target?.datas?.at(-1);
-                const ret = isMetricLimitCrossed(tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value);
+                const ret = semsportal.isMetricLimitCrossed(tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value);
                 console.log('isMetricLimitCrossed:', tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value, ret);
 
                 if (currentData?.value == tData.triggerFields.limit_value) {
@@ -272,17 +286,17 @@ async function inverterJob(userId, inverterId, lastCheckTime, callsNumSinceHit) 
                 return ret;
             });
         }
-    } catch (e) {
-        if (e.status == 401) {
+    } catch (err) {
+        if (err.status == 401) {
             console.log(`${inverterId}: notifying in order to refresh access token`);
             triggerIdsToNotify = tIds.slice(0, 1);
         } else {
-            throw e;
+            console.error(err.stack);
         }
     } finally {
         scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime, callsNumSinceHit, jobStartTime);
     }
 
     console.log('triggerIdsToNotify:', triggerIdsToNotify);
-    notifyIFTTT(triggerIdsToNotify);
+    ifttt.notify(null, triggerIdsToNotify);
 }
