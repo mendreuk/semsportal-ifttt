@@ -1,5 +1,45 @@
 import https from 'https';
 
+const PROJECT = "semsportalifttt";
+const globalLogFields = {};
+let globalLogComponents;
+
+export function setLogTrace(trace) {
+    globalLogFields['logging.googleapis.com/trace'] = `projects/${PROJECT}/traces/${trace}`;
+    globalLogComponents = {};
+}
+
+export function addLogComponents(components) {
+    Object.assign(globalLogComponents, components);
+}
+
+export function logError() {
+    log([...arguments], 'ERROR');
+}
+
+export function logWarning() {
+    log([...arguments], 'WARNING');
+}
+
+export function logInfo() {
+    log([...arguments], 'INFO');
+}
+
+export function logDebug() {
+    log([...arguments], 'DEBUG');
+}
+
+function log(msgs, severity = 'DEFAULT') {
+    const entry = Object.assign({
+        severity: severity,
+        message: msgs.map((o) => (typeof o == 'string') ? o : JSON.stringify(o)).join(' '),
+    },
+        globalLogComponents,
+        globalLogFields
+    );
+    console.log(JSON.stringify(entry));
+}
+
 export function getUserFromToken(req) {
     return req.auth.payload['https://ifttt.com/semsportal/user'];
 }
@@ -38,11 +78,11 @@ export async function callHttpJson(method, url, headers, payload) {
         if (payload) {
             req.write(payload);
         }
-        console.log('>req ' + method + ' ' + url + '>:', JSON.stringify(options.headers), payload ? payload : '');
+        logInfo('>req ' + method + ' ' + url + '>:', JSON.stringify(options.headers), payload ? payload : '');
         req.end();
     }).then(
         async (res) => {
-            console.log('<res ' + res.status + ' ' + url + '<:', res.body);
+            logInfo('<res ' + res.status + ' ' + url + '<:', res.body);
             if (res.status >= 200 && res.status < 300) {
                 try {
                     response = JSON.parse(res.body);
@@ -54,7 +94,7 @@ export async function callHttpJson(method, url, headers, payload) {
             }
         },
         async (error) => {
-            console.log('>req error ' + url + '>:', error);
+            logInfo('>req error ' + url + '>:', error);
             throwError(502, 'Request error');
         });
     return response;

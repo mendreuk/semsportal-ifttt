@@ -1,4 +1,4 @@
-import { getUserFromToken, callHttpJson, throwError } from './helper.js';
+import { logDebug, getUserFromToken, callHttpJson, throwError } from './helper.js';
 import getUuid from 'uuid-by-string';
 import { find } from 'geo-tz';
 
@@ -69,7 +69,7 @@ async function getStationHistoryCurrentData(inverterId, metricIds, lastCheckTime
     const nowLocalTzString = tzDateToISOString(Date.now(), tzOffset);
     const startTime = (lastCheckTime) ? new Date(lastCheckTime).toISOString().slice(0, 16) : nowLocalTzString.slice(0, 10) + ' 00:00';
     const endTime = nowLocalTzString.slice(0, 10) + ' 23:59';
-    console.log('startTime:', startTime);
+    logDebug('semsportal startTime:', startTime);
 
     const semsRespBody = await getStationHistoryDataChart(inverterId, metricIds, svcAccessToken, startTime, endTime);
     return semsRespBody?.data?.list?.[0].inverters?.[0].targets;

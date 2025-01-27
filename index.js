@@ -1,5 +1,5 @@
 import express from "express-promise-router";
-import { getUserFromToken } from './helper.js';
+import { setLogTrace, addLogComponents, logInfo, logDebug, logError, getUserFromToken } from './helper.js';
 import semsportal from './semsportal.js';
 import auth0 from './auth0.js';
 import ifttt from './ifttt-realtime.js';
@@ -20,10 +20,43 @@ export const api = express();
 
 process.on('exit', function () {
     const timeouts = Object.values(jobs);
-    console.log(`${timeouts.length} jobs have been unregistered before exiting`);
+    logInfo(`${timeouts.length} jobs have been unregistered before exiting`);
     timeouts.forEach((timeout) => {
         clearTimeout(timeout);
     });
+});
+
+api.use(function setLogTraceFromReq(req, res, next) {
+    if (typeof req !== 'undefined') {
+        const traceHeader = req.header('X-Cloud-Trace-Context');
+        if (traceHeader) {
+            setLogTrace(traceHeader.split('/')[0]);
+
+            const [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
+            addLogComponents({
+                inverterId: inverterId,
+                metricId: metricId,
+                triggerName: getTriggerName(req),
+                triggerId: req.body.trigger_identity
+            });
+        }
+    }
+    next();
+});
+
+api.use(function requestLogger(req, res, next) {
+    logInfo('<req ' + req.method + ' IFTTT ' + req.path + '<:', req.headers, req.body);
+    next();
+});
+
+api.use(function responseLogger(req, res, next) {
+    let send = res.send;
+    res.send = (content) => {
+        logInfo('>res ' + res.statusCode + ' IFTTT ' + req.path + '>:', content ? JSON.stringify(content) : '');
+        res.send = send;
+        return res.send(content);
+    }
+    next();
 });
 
 function serviceKeyCheck(req, res, next) {
@@ -37,6 +70,9 @@ function serviceKeyCheck(req, res, next) {
 }
 
 function providerAccessTokenCheck(req, res, next) {
+    const userId = getUserId(req);
+    addLogComponents({ userId: userId });
+
     const providerAccessToken = getUserFromToken(req)?.auth?.access_token;
     if (!providerAccessToken) {
         const err = Error('Missing provider access token');
@@ -49,13 +85,12 @@ function providerAccessTokenCheck(req, res, next) {
 
 function registerTrigger(req, res, next) {
     const user = getUserFromToken(req);
-    console.log('subscriptionPlan:', user.subscription);
+    logDebug('subscriptionPlan:', user.subscription);
     if (checkSubscriptionPlan(user.subscription) && req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
         const userId = getUserId(req);
         providerAccessTokens[userId] = getUserFromToken(req).auth.access_token;
 
         const [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
-
         const triggerId = req.body.trigger_identity;
         if (!triggerData[triggerId]) {
             triggerData[triggerId] = {
@@ -64,7 +99,7 @@ function registerTrigger(req, res, next) {
                 triggerFields: req.body.triggerFields,
                 metricLastValue: null
             }
-            console.log(`${triggerId}: trigger has been registered`);
+            logInfo('trigger has been registered');
         }
 
         if (!triggerIds[inverterId]) {
@@ -74,7 +109,7 @@ function registerTrigger(req, res, next) {
 
         if (!jobs[inverterId]) {
             scheduleInverterJob(userId, inverterId, null, null, JOB_STARTUP_CALLS_NUM, Date.now());
-            console.log(`${inverterId}: job has been registered`);
+            logInfo('job has been registered');
         }
     }
 
@@ -93,30 +128,15 @@ function unregisterTrigger(req) {
         if (timeout) {
             delete jobs[inverterId];
             clearTimeout(timeout);
-            console.log(`${inverterId}: job has been unregistered`);
+            logInfo('job has been unregistered');
         }
     }
 
     delete triggerData[triggerId];
-    console.log(`${triggerId}: trigger has been unregistered`);
+    logInfo('trigger has been unregistered');
 
     stats();
 }
-
-api.use(function requestLogger(req, res, next) {
-    console.log('<req ' + req.method + ' IFTTT ' + req.path + '<:', req.headers, req.body);
-    next();
-});
-
-api.use(function responseLogger(req, res, next) {
-    let send = res.send;
-    res.send = (content) => {
-        console.log('>res ' + res.statusCode + ' IFTTT ' + req.path + '>:', content ? JSON.stringify(content) : '');
-        res.send = send;
-        return res.send(content);
-    }
-    next();
-});
 
 api.get('/ifttt/v1/status', serviceKeyCheck, status);
 api.post('/ifttt/v1/test/setup', serviceKeyCheck, testSetup);
@@ -134,7 +154,7 @@ api.use(function errorHandler(err, req, res, next) {
     if (res.headersSent) {
         return next(err)
     }
-    console.error(err.stack);
+    logError(err.stack);
     res.status(err.status || 500).send({
         "errors": [{
             "message": err.message
@@ -150,7 +170,7 @@ async function startSubscribedUsersTriggers() {
         .filter((user) => checkSubscriptionPlan(user.app_metadata?.subscription))
         .map((user) => user.user_id);
 
-    console.log('subscribedUsersToStartJobs:', subscribedUsersToStartJobs);
+    logDebug('subscribedUsersToStartJobs:', subscribedUsersToStartJobs);
     ifttt.notify(subscribedUsersToStartJobs);
 }
 
@@ -193,7 +213,7 @@ function stats() {
         jobs: Object.keys(jobs).length,
         triggers: Object.keys(triggerData).length
     };
-    console.log('stats: ', stats);
+    logInfo('stats: ', stats);
     return stats;
 }
 
@@ -217,7 +237,7 @@ function getUserEmail(req) {
 }
 
 function scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime, jobCallsNumSinceHit, lastJobStartTime) {
-    console.log('currentCheckTime, lastCheckTime:', currentCheckTime, lastCheckTime);
+    logDebug(`currentCheckTime: ${currentCheckTime}, lastCheckTime: ${lastCheckTime}`);
 
     // the time values are:
     // - undefined if no data is being returned since midnight until the morning
@@ -227,13 +247,14 @@ function scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime
     let jobBaseDelayMs = JOB_FIXED_DELAY_MS;
     if (currentCheckTime === lastCheckTime) {
         if (jobCallsNumSinceHit == 1) {
-            console.log(`${inverterId}: inverter is probably shut down or semsportal is temporarily unavailable`);
+            logInfo('inverter is probably shut down or semsportal is temporarily unavailable');
             jobBaseDelayMs = JOB_SLEEP_DELAY_MS;
+            jobCallsNumSinceHit = 0;
         } else if (jobCallsNumSinceHit != JOB_STARTUP_CALLS_NUM) {
-            console.log(`${inverterId}: inverter upload time hit after ${jobCallsNumSinceHit} calls`);
+            logInfo(`inverter upload time hit after ${jobCallsNumSinceHit} calls`);
             jobBaseDelayMs += JOB_ONE_TIME_OFFSET_MS;
+            jobCallsNumSinceHit = 0;
         }
-        jobCallsNumSinceHit = 0;
     }
 
     const jobAdvanceMs = countJobAdvance(jobCallsNumSinceHit);
@@ -242,7 +263,7 @@ function scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime
     // do no put any code here in order to keep jobDelayMs as precise as possible
 
     jobs[inverterId] = setTimeout(inverterJob, jobDelayMs, userId, inverterId, currentCheckTime, jobCallsNumSinceHit + 1);
-    console.log(`${inverterId}: job took ${Math.round(jobTookMs / 10) / 100}s, planned advance ${jobAdvanceMs / 1000}s (after ${jobCallsNumSinceHit} calls since hit), next job scheduled in ${Math.round(jobDelayMs / 10) / 100}s`);
+    logInfo(`job took ${Math.round(jobTookMs / 10) / 100}s, planned advance ${jobAdvanceMs / 1000}s (after ${jobCallsNumSinceHit} calls since hit), next job scheduled in ${Math.round(jobDelayMs / 10) / 100}s`);
 }
 
 function countJobAdvance(callsNumSinceHit) {
@@ -251,7 +272,13 @@ function countJobAdvance(callsNumSinceHit) {
 
 async function inverterJob(userId, inverterId, lastCheckTime, callsNumSinceHit) {
     const jobStartTime = Date.now();
-    console.log(`${inverterId}: job started`);
+    setLogTrace(jobs[inverterId]);
+    addLogComponents({
+        userId: userId,
+        inverterId: inverterId
+    });
+    logInfo('job started');
+
     const tIds = Array.from(triggerIds[inverterId]);
     let triggerIdsToNotify = [];
     let currentCheckTime = null;
@@ -264,7 +291,7 @@ async function inverterJob(userId, inverterId, lastCheckTime, callsNumSinceHit) 
         if (targets) {
             targets.forEach((t) => {
                 const currentData = t.datas?.at(-1);
-                console.log(`current ${t.target_name} data: ${currentData ? JSON.stringify(currentData) : 'unavailable'}`);
+                logDebug(`current ${t.target_name} data: ${currentData ? JSON.stringify(currentData) : 'unavailable'}`);
             });
 
             triggerIdsToNotify = tIds.filter((tId) => {
@@ -274,11 +301,11 @@ async function inverterJob(userId, inverterId, lastCheckTime, callsNumSinceHit) 
 
                 const currentData = target?.datas?.at(-1);
                 const ret = semsportal.isMetricLimitCrossed(tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value);
-                console.log('isMetricLimitCrossed:', tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value, ret);
+                logDebug('isMetricLimitCrossed:', tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value, ret);
 
                 if (currentData?.value == tData.triggerFields.limit_value) {
                     // when the metric lands on the limit but bounces back above, this prevents triggering metric_exceeded without previously triggering metric_dropped_below (and vice versa)
-                    console.log('metric is right on the limit, withholding the notification and waiting for the next data to decide');
+                    logDebug('metric is right on the limit, withholding the notification and waiting for the next data to decide');
                 } else {
                     tData.metricLastValue = currentData?.value;
                     currentCheckTime = currentData?.stat_date;
@@ -288,15 +315,15 @@ async function inverterJob(userId, inverterId, lastCheckTime, callsNumSinceHit) 
         }
     } catch (err) {
         if (err.status == 401) {
-            console.log(`${inverterId}: notifying in order to refresh access token`);
+            logInfo('notifying in order to refresh access token');
             triggerIdsToNotify = tIds.slice(0, 1);
         } else {
-            console.error(err.stack);
+            logEror(err.stack);
         }
     } finally {
         scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime, callsNumSinceHit, jobStartTime);
     }
 
-    console.log('triggerIdsToNotify:', triggerIdsToNotify);
+    logDebug('triggerIdsToNotify:', triggerIdsToNotify);
     ifttt.notify(null, triggerIdsToNotify);
 }

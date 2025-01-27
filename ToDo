@@ -1,7 +1,5 @@
+- udelat 5-minutovy a 1-minutovy job
 - otestovat smazani hesla z auth0 a reconnectu
-- logovani
-    -? udelat log debug(), ktera bude logovat jen s process.env.DEBUG=true
-    - budu potrebovat filtrovat logy podle userId, triggerId, inverterId(jobId), metricId - vyzkoumat, jestli to jde pridat do metadat
 - pri review pred nasazenim do produ mozna bude problem s prihlasovanim https://ifttt.com/docs/guidelines#authentication
 
 - pri zasahu do auth0 dbat v iffftu na zpetnou kompatibilitu dat useru a tokenu (napr. pri zmene app_metadat nebo fce co vytvari access token) - chvili trva, nez se tokeny refreshnou
