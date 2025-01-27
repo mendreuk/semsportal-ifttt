@@ -1,15 +1,14 @@
 import express from "express-promise-router";
-import { setLogTrace, addLogComponents, logInfo, logDebug, logError, getUserFromToken } from './helper.js';
+import { setLogTrace, addLogComponents, logDebug, logInfo, logWarning, logError, getUserFromToken, getTriggerName } from './helper.js';
 import semsportal from './semsportal.js';
 import auth0 from './auth0.js';
 import ifttt from './ifttt-realtime.js';
 
-const JOB_FIXED_DELAY_MS = 60 * 1000; // TODO nekdo bude treba s 5-minutovym planem
+const PLAN_DEFAULT_CHECK_PERIOD_SEC = 300;
 const JOB_ONE_TIME_OFFSET_MS = 5 * 1000;
 const JOB_ADVANCE_FN_COEFF = 1;
 const JOB_MAX_ADVANCE_MS = JOB_ONE_TIME_OFFSET_MS * 0.95;
 const JOB_STARTUP_CALLS_NUM = 999999;
-const JOB_SLEEP_DELAY_MS = 5 * 60 * 1000;
 
 const jobs = {}; // inverterId -> timeout
 const triggerData = {}; // triggerId -> trigger data object
@@ -32,13 +31,21 @@ api.use(function setLogTraceFromReq(req, res, next) {
         if (traceHeader) {
             setLogTrace(traceHeader.split('/')[0]);
 
-            const [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
             addLogComponents({
-                inverterId: inverterId,
-                metricId: metricId,
-                triggerName: getTriggerName(req),
-                triggerId: req.body.trigger_identity
+                invocation: getReqPath(req)
             });
+            if (req.body?.triggerFields?.inverter_metric_id) { // trigger POST request
+                const [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
+                addLogComponents({
+                    inverterId: inverterId,
+                    metricId: metricId,
+                    triggerId: req.body.trigger_identity
+                });
+            } else if (req.params['triggerId']) { // trigger DELETE request
+                addLogComponents({
+                    triggerId: req.params['triggerId']
+                });
+            }
         }
     }
     next();
@@ -69,24 +76,29 @@ function serviceKeyCheck(req, res, next) {
     }
 }
 
-function providerAccessTokenCheck(req, res, next) {
+function userCheck(req, res, next) {
     const userId = getUserId(req);
     addLogComponents({ userId: userId });
 
-    const providerAccessToken = getUserFromToken(req)?.auth?.access_token;
-    if (!providerAccessToken) {
-        const err = Error('Missing provider access token');
+    const user = getUserFromToken(req);
+    try {
+        user.email.field_is_required
+            || user.auth.access_token.field_is_required
+            || user.plan.check_period_sec.field_is_required
+            || user.plan.created_at.field_is_required;
+
+        logDebug('user\'s plan:', user.plan);
+        next();
+    } catch (err) {
+        logDebug('user:', user);
+        err.message = 'Unknown user object';
         err.status = 401;
         next(err);
-    } else {
-        next();
     }
 }
 
 function registerTrigger(req, res, next) {
-    const user = getUserFromToken(req);
-    logDebug('subscriptionPlan:', user.subscription);
-    if (checkSubscriptionPlan(user.subscription) && req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
+    if (req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
         const userId = getUserId(req);
         providerAccessTokens[userId] = getUserFromToken(req).auth.access_token;
 
@@ -108,7 +120,8 @@ function registerTrigger(req, res, next) {
         triggerIds[inverterId].add(triggerId);
 
         if (!jobs[inverterId]) {
-            scheduleInverterJob(userId, inverterId, null, null, JOB_STARTUP_CALLS_NUM, Date.now());
+            const user = getUserFromToken(req);
+            scheduleInverterJob(userId, user.plan, inverterId, null, null, JOB_STARTUP_CALLS_NUM, Date.now());
             logInfo('job has been registered');
         }
     }
@@ -142,12 +155,12 @@ api.get('/ifttt/v1/status', serviceKeyCheck, status);
 api.post('/ifttt/v1/test/setup', serviceKeyCheck, testSetup);
 api.get('/ifttt/v1/user/info', auth0.jwtCheck, userInfo);
 
-api.post('/ifttt/v1/triggers/metric_drops_below_limit', auth0.jwtCheck, providerAccessTokenCheck, registerTrigger, semsportal.trigger);
-api.post('/ifttt/v1/triggers/metric_drops_below_limit/fields/inverter_metric_id/options', auth0.jwtCheck, providerAccessTokenCheck, semsportal.triggerOptions);
+api.post('/ifttt/v1/triggers/metric_drops_below_limit', auth0.jwtCheck, userCheck, registerTrigger, semsportal.trigger);
+api.post('/ifttt/v1/triggers/metric_drops_below_limit/fields/inverter_metric_id/options', auth0.jwtCheck, userCheck, semsportal.triggerOptions);
 api.delete('/ifttt/v1/triggers/metric_drops_below_limit/trigger_identity/:triggerId', auth0.jwtCheck, deleteTrigger);
 
-api.post('/ifttt/v1/triggers/metric_exceeds_limit', auth0.jwtCheck, providerAccessTokenCheck, registerTrigger, semsportal.trigger);
-api.post('/ifttt/v1/triggers/metric_exceeds_limit/fields/inverter_metric_id/options', auth0.jwtCheck, providerAccessTokenCheck, semsportal.triggerOptions);
+api.post('/ifttt/v1/triggers/metric_exceeds_limit', auth0.jwtCheck, userCheck, registerTrigger, semsportal.trigger);
+api.post('/ifttt/v1/triggers/metric_exceeds_limit/fields/inverter_metric_id/options', auth0.jwtCheck, userCheck, semsportal.triggerOptions);
 api.delete('/ifttt/v1/triggers/metric_exceeds_limit/trigger_identity/:triggerId', auth0.jwtCheck, deleteTrigger);
 
 api.use(function errorHandler(err, req, res, next) {
@@ -162,22 +175,13 @@ api.use(function errorHandler(err, req, res, next) {
     });
 });
 
-startSubscribedUsersTriggers();
+startUsersTriggers();
 
-async function startSubscribedUsersTriggers() {
-    const subscribedUsers = await auth0.getSubscribedUsers();
-    const subscribedUsersToStartJobs = subscribedUsers
-        .filter((user) => checkSubscriptionPlan(user.app_metadata?.subscription))
-        .map((user) => user.user_id);
-
-    logDebug('subscribedUsersToStartJobs:', subscribedUsersToStartJobs);
-    ifttt.notify(subscribedUsersToStartJobs);
-}
-
-function checkSubscriptionPlan(subscription) {
-    return subscription !== null
-        && subscription.expires_at > Date.now()
-        && subscription.plan === 'check_every_minute';
+async function startUsersTriggers() {
+    const usersWithPlan = await auth0.getUsersWithPlan();
+    const userIdsWithPlan = usersWithPlan.map((user) => user.user_id);
+    logDebug('usersToStartJobs:', userIdsWithPlan);
+    ifttt.notify(userIdsWithPlan);
 }
 
 function status(req, res) {
@@ -224,8 +228,9 @@ function equalSets(xset, yset) {
         [...xs].every((x) => ys.has(x));
 }
 
-function getTriggerName(req) {
-    return req.path.substring(req.path.lastIndexOf('/') + 1);
+function getReqPath(req) {
+    const iftttBasePath = '/ifttt/v1/';
+    return req.path.substring(req.path.indexOf(iftttBasePath) + iftttBasePath.length);
 }
 
 function getUserId(req) {
@@ -236,33 +241,43 @@ function getUserEmail(req) {
     return getUserFromToken(req).email;
 }
 
-function scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime, jobCallsNumSinceHit, lastJobStartTime) {
+function checkPlanExpired(plan) {
+    return !plan || (plan.expires_at && plan.expires_at <= Date.now());
+}
+
+function scheduleInverterJob(userId, userPlan, inverterId, currentCheckTime, lastCheckTime, jobCallsNumSinceHit, lastJobStartTime) {
+    if (checkPlanExpired(userPlan)) {
+        logWarning('user\'s plan has expired, using defaults!');
+        userPlan.check_period_sec = PLAN_DEFAULT_CHECK_PERIOD_SEC;
+    }
     logDebug(`currentCheckTime: ${currentCheckTime}, lastCheckTime: ${lastCheckTime}`);
+
+    const jobFixedDelayMs = userPlan.check_period_sec * 1000;
+    const jobSleepDelayMs = Math.max(jobFixedDelayMs * 5, 10 * 60 * 1000);
+    let jobBaseDelayMs = jobFixedDelayMs;
 
     // the time values are:
     // - undefined if no data is being returned since midnight until the morning
     // - some useful time during the daylight
     // - the last value measured when the inverter shuts down until the midnight
     // - null after startup or when the semsportal call timeouts (usually takes longer to recover)
-    let jobBaseDelayMs = JOB_FIXED_DELAY_MS;
     if (currentCheckTime === lastCheckTime) {
         if (jobCallsNumSinceHit == 1) {
             logInfo('inverter is probably shut down or semsportal is temporarily unavailable');
-            jobBaseDelayMs = JOB_SLEEP_DELAY_MS;
-            jobCallsNumSinceHit = 0;
-        } else if (jobCallsNumSinceHit != JOB_STARTUP_CALLS_NUM) {
+            jobBaseDelayMs = jobSleepDelayMs;
+        } else if (currentCheckTime) {
             logInfo(`inverter upload time hit after ${jobCallsNumSinceHit} calls`);
             jobBaseDelayMs += JOB_ONE_TIME_OFFSET_MS;
-            jobCallsNumSinceHit = 0;
         }
+        jobCallsNumSinceHit = 0;
     }
 
     const jobAdvanceMs = countJobAdvance(jobCallsNumSinceHit);
     const jobTookMs = Date.now() - lastJobStartTime;
     const jobDelayMs = jobBaseDelayMs - jobTookMs - jobAdvanceMs;
-    // do no put any code here in order to keep jobDelayMs as precise as possible
+    // do not put any code here in order to keep jobDelayMs as precise as possible
 
-    jobs[inverterId] = setTimeout(inverterJob, jobDelayMs, userId, inverterId, currentCheckTime, jobCallsNumSinceHit + 1);
+    jobs[inverterId] = setTimeout(inverterJob, jobDelayMs, userId, userPlan, inverterId, currentCheckTime, jobCallsNumSinceHit + 1);
     logInfo(`job took ${Math.round(jobTookMs / 10) / 100}s, planned advance ${jobAdvanceMs / 1000}s (after ${jobCallsNumSinceHit} calls since hit), next job scheduled in ${Math.round(jobDelayMs / 10) / 100}s`);
 }
 
@@ -270,10 +285,11 @@ function countJobAdvance(callsNumSinceHit) {
     return Math.min(callsNumSinceHit * callsNumSinceHit * JOB_ADVANCE_FN_COEFF, JOB_MAX_ADVANCE_MS);
 }
 
-async function inverterJob(userId, inverterId, lastCheckTime, callsNumSinceHit) {
+async function inverterJob(userId, userPlan, inverterId, lastCheckTime, callsNumSinceHit) {
     const jobStartTime = Date.now();
     setLogTrace(jobs[inverterId]);
     addLogComponents({
+        invocation: 'job',
         userId: userId,
         inverterId: inverterId
     });
@@ -321,7 +337,7 @@ async function inverterJob(userId, inverterId, lastCheckTime, callsNumSinceHit) 
             logEror(err.stack);
         }
     } finally {
-        scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime, callsNumSinceHit, jobStartTime);
+        scheduleInverterJob(userId, userPlan, inverterId, currentCheckTime, lastCheckTime, callsNumSinceHit, jobStartTime);
     }
 
     logDebug('triggerIdsToNotify:', triggerIdsToNotify);

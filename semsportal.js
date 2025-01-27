@@ -1,4 +1,4 @@
-import { logDebug, getUserFromToken, callHttpJson, throwError } from './helper.js';
+import { logDebug, getUserFromToken, getTriggerName, callHttpJson, throwError } from './helper.js';
 import getUuid from 'uuid-by-string';
 import { find } from 'geo-tz';
 
@@ -175,10 +175,6 @@ function createMetricIFTTTOptionsData(powerStationId, powerStationTzOffset, inve
         label: targetIndex + "  " + targetName,
         value: powerStationId + "|" + powerStationTzOffset + "|" + inverterSn + "&" + targetIndex + "|" + targetKey
     };
-}
-
-function getTriggerName(req) {
-    return req.path.substring(req.path.lastIndexOf('/') + 1);
 }
 
 function getOffsetFromTz(timeZone = 'UTC', date = new Date()) {

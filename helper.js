@@ -44,6 +44,10 @@ export function getUserFromToken(req) {
     return req.auth.payload['https://ifttt.com/semsportal/user'];
 }
 
+export function getTriggerName(req) {
+    return req.path.substring(req.path.lastIndexOf('/') + 1);
+}
+
 export async function callHttpJson(method, url, headers, payload) {
     const options = {
         headers: {
