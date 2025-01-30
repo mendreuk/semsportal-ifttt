@@ -1,8 +1,8 @@
-- udelat 5-minutovy a 1-minutovy job
+- otestovat priblizovani upload OR advance OR shut OR currentCheckTime
 - otestovat smazani hesla z auth0 a reconnectu
+- otestovat bezplatneho usera
 - pri review pred nasazenim do produ mozna bude problem s prihlasovanim https://ifttt.com/docs/guidelines#authentication
 
-- pri zasahu do auth0 dbat v iffftu na zpetnou kompatibilitu dat useru a tokenu (napr. pri zmene app_metadat nebo fce co vytvari access token) - chvili trva, nez se tokeny refreshnou
 - pred uplynutim expirace subskripce bude potreba nejaky job, ktery bude emailovat na prodlouzeni
 - v logu se objevovalo 429 (dosly instance), protoze mam nastaveno max 1 - mozna to ale bylo jen kvuli castym redeployum
 - po mesici rozumneho trafiku zkusit nechat Recommender vyhodnotit, jestli neprejit na instance-based billing, mozna pro me bude vhodnejsi https://cloud.google.com/run/docs/configuring/billing-settings?hl=en

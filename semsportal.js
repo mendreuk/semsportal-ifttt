@@ -69,7 +69,7 @@ async function getStationHistoryCurrentData(inverterId, metricIds, lastCheckTime
     const nowLocalTzString = tzDateToISOString(Date.now(), tzOffset);
     const startTime = (lastCheckTime) ? new Date(lastCheckTime).toISOString().slice(0, 16) : nowLocalTzString.slice(0, 10) + ' 00:00';
     const endTime = nowLocalTzString.slice(0, 10) + ' 23:59';
-    logDebug('semsportal startTime:', startTime);
+    logDebug('semsportal req startTime:', startTime);
 
     const semsRespBody = await getStationHistoryDataChart(inverterId, metricIds, svcAccessToken, startTime, endTime);
     return semsRespBody?.data?.list?.[0].inverters?.[0].targets;

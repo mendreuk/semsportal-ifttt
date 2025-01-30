@@ -1,7 +1,7 @@
 import https from 'https';
 
 const PROJECT = "semsportalifttt";
-const globalLogFields = {};
+let globalLogFields = {};
 let globalLogComponents;
 
 export function setLogTrace(trace) {
@@ -69,6 +69,8 @@ export async function callHttpJson(method, url, headers, payload) {
         };
     }
 
+    const [globalLogFieldsTemp, globalLogComponentsTemp] = [globalLogFields, globalLogComponents];
+
     let response;
     await new Promise((resolve, reject) => {
         const req = https.request(url, options, (res) => {
@@ -82,23 +84,28 @@ export async function callHttpJson(method, url, headers, payload) {
         if (payload) {
             req.write(payload);
         }
-        logInfo('>req ' + method + ' ' + url + '>:', JSON.stringify(options.headers), payload ? payload : '');
+        logInfo(`>req ${method} ${url}>:`, JSON.stringify(options.headers), payload ? payload : '');
         req.end();
     }).then(
         async (res) => {
-            logInfo('<res ' + res.status + ' ' + url + '<:', res.body);
+            [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
+
             if (res.status >= 200 && res.status < 300) {
+                logInfo(`<res ${res.status} ${url}<:`, res.body);
                 try {
                     response = JSON.parse(res.body);
                 } catch (e) {
                     throwError(502, 'Invalid response body');
                 }
             } else {
+                logError(`<res ${res.status} ${url}<:`, res.body);
                 throwError(502, 'Error status received');
             }
         },
         async (error) => {
-            logInfo('>req error ' + url + '>:', error);
+            [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
+
+            logError(`>req error ${url}>:`, error);
             throwError(502, 'Request error');
         });
     return response;

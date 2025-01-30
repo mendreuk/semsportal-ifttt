@@ -8,12 +8,12 @@ const PLAN_DEFAULT_CHECK_PERIOD_SEC = 300;
 const JOB_ONE_TIME_OFFSET_MS = 5 * 1000;
 const JOB_ADVANCE_FN_COEFF = 1;
 const JOB_MAX_ADVANCE_MS = JOB_ONE_TIME_OFFSET_MS * 0.95;
-const JOB_STARTUP_CALLS_NUM = 999999;
+const JOB_INIT_CALLS_NUM = 10e6; // used on startup and after a sleep
 
 const jobs = {}; // inverterId -> timeout
 const triggerData = {}; // triggerId -> trigger data object
 const triggerIds = {}; // inverterId -> set of triggerIds
-const providerAccessTokens = {}; // userId -> provider access token
+const providerAccessTokens = {}; // userId -> provider access token // users are not being unregistered
 
 export const api = express();
 
@@ -30,20 +30,23 @@ api.use(function setLogTraceFromReq(req, res, next) {
         const traceHeader = req.header('X-Cloud-Trace-Context');
         if (traceHeader) {
             setLogTrace(traceHeader.split('/')[0]);
-
             addLogComponents({
                 invocation: getReqPath(req)
             });
-            if (req.body?.triggerFields?.inverter_metric_id) { // trigger POST request
-                const [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
+
+            let triggerId, inverterId, metricId;
+            if (req.method === 'POST' && req.body?.triggerFields?.inverter_metric_id) { // trigger POST request
+                triggerId = req.body.trigger_identity;
+                [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
+            } else if (req.method === 'DELETE') { // trigger DELETE request
+                triggerId = req.path.substring(req.path.lastIndexOf('/') + 1);
+                [inverterId, metricId] = triggerData[triggerId].triggerFields.inverter_metric_id.split('&')
+            }
+            if (triggerId) {
                 addLogComponents({
                     inverterId: inverterId,
                     metricId: metricId,
-                    triggerId: req.body.trigger_identity
-                });
-            } else if (req.params['triggerId']) { // trigger DELETE request
-                addLogComponents({
-                    triggerId: req.params['triggerId']
+                    triggerId: triggerId
                 });
             }
         }
@@ -59,7 +62,11 @@ api.use(function requestLogger(req, res, next) {
 api.use(function responseLogger(req, res, next) {
     let send = res.send;
     res.send = (content) => {
-        logInfo('>res ' + res.statusCode + ' IFTTT ' + req.path + '>:', content ? JSON.stringify(content) : '');
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+            logInfo('>res ' + res.statusCode + ' IFTTT ' + req.path + '>:', content ? JSON.stringify(content) : '');
+        } else {
+            logError('>res ' + res.statusCode + ' IFTTT ' + req.path + '>:', content ? JSON.stringify(content) : '');
+        }
         res.send = send;
         return res.send(content);
     }
@@ -84,10 +91,8 @@ function userCheck(req, res, next) {
     try {
         user.email.field_is_required
             || user.auth.access_token.field_is_required
-            || user.plan.check_period_sec.field_is_required
-            || user.plan.created_at.field_is_required;
-
-        logDebug('user\'s plan:', user.plan);
+            || user.plan?.check_period_sec.field_is_required
+            || user.plan?.created_at.field_is_required;
         next();
     } catch (err) {
         logDebug('user:', user);
@@ -98,10 +103,12 @@ function userCheck(req, res, next) {
 }
 
 function registerTrigger(req, res, next) {
-    if (req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
+    const user = getUserFromToken(req);
+    if (user.plan && req.body.triggerFields?.inverter_metric_id && req.body.triggerFields?.limit_value) {
         const userId = getUserId(req);
         providerAccessTokens[userId] = getUserFromToken(req).auth.access_token;
 
+        let showStats = false;
         const [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
         const triggerId = req.body.trigger_identity;
         if (!triggerData[triggerId]) {
@@ -112,6 +119,7 @@ function registerTrigger(req, res, next) {
                 metricLastValue: null
             }
             logInfo('trigger has been registered');
+            showStats = true;
         }
 
         if (!triggerIds[inverterId]) {
@@ -120,13 +128,16 @@ function registerTrigger(req, res, next) {
         triggerIds[inverterId].add(triggerId);
 
         if (!jobs[inverterId]) {
-            const user = getUserFromToken(req);
-            scheduleInverterJob(userId, user.plan, inverterId, null, null, JOB_STARTUP_CALLS_NUM, Date.now());
+            logDebug('user\'s plan:', user.plan);
+            scheduleInverterJob(userId, user.plan, inverterId, null, null, JOB_INIT_CALLS_NUM, Date.now());
             logInfo('job has been registered');
+            showStats = true;
+        }
+
+        if (showStats) {
+            stats();
         }
     }
-
-    stats();
     next();
 }
 
@@ -137,6 +148,8 @@ function unregisterTrigger(req) {
     triggerIds[inverterId].delete(triggerId);
 
     if (triggerIds[inverterId].size == 0) {
+        delete triggerIds[inverterId];
+
         const timeout = jobs[inverterId];
         if (timeout) {
             delete jobs[inverterId];
@@ -245,15 +258,18 @@ function checkPlanExpired(plan) {
     return !plan || (plan.expires_at && plan.expires_at <= Date.now());
 }
 
+/**
+ * performs continuous automatic convergence to the time the inverter is uploading data
+ */
 function scheduleInverterJob(userId, userPlan, inverterId, currentCheckTime, lastCheckTime, jobCallsNumSinceHit, lastJobStartTime) {
     if (checkPlanExpired(userPlan)) {
-        logWarning('user\'s plan has expired, using defaults!');
+        logWarning('scheduler: user\'s plan has expired, using defaults!');
         userPlan.check_period_sec = PLAN_DEFAULT_CHECK_PERIOD_SEC;
     }
-    logDebug(`currentCheckTime: ${currentCheckTime}, lastCheckTime: ${lastCheckTime}`);
+    logDebug(`scheduler: jobCallsNumSinceHit: ${jobCallsNumSinceHit}, currentCheckTime: ${currentCheckTime}, lastCheckTime: ${lastCheckTime}`);
 
     const jobFixedDelayMs = userPlan.check_period_sec * 1000;
-    const jobSleepDelayMs = Math.max(jobFixedDelayMs * 5, 10 * 60 * 1000);
+    const jobSleepDelayMs = Math.min(jobFixedDelayMs * 5, 10 * 60 * 1000);
     let jobBaseDelayMs = jobFixedDelayMs;
 
     // the time values are:
@@ -262,14 +278,17 @@ function scheduleInverterJob(userId, userPlan, inverterId, currentCheckTime, las
     // - the last value measured when the inverter shuts down until the midnight
     // - null after startup or when the semsportal call timeouts (usually takes longer to recover)
     if (currentCheckTime === lastCheckTime) {
-        if (jobCallsNumSinceHit == 1) {
-            logInfo('inverter is probably shut down or semsportal is temporarily unavailable');
+        if (jobCallsNumSinceHit == 1 || jobCallsNumSinceHit == JOB_INIT_CALLS_NUM + 1) {
+            logInfo('scheduler: inverter is probably shut down or semsportal is temporarily unavailable');
+            jobCallsNumSinceHit = JOB_INIT_CALLS_NUM;
             jobBaseDelayMs = jobSleepDelayMs;
         } else if (currentCheckTime) {
-            logInfo(`inverter upload time hit after ${jobCallsNumSinceHit} calls`);
+            logInfo(`scheduler: inverter upload time hit after ${jobCallsNumSinceHit} calls`);
+            jobCallsNumSinceHit = 0;
             jobBaseDelayMs += JOB_ONE_TIME_OFFSET_MS;
+        } else {
+            jobCallsNumSinceHit = 0;
         }
-        jobCallsNumSinceHit = 0;
     }
 
     const jobAdvanceMs = countJobAdvance(jobCallsNumSinceHit);
@@ -278,7 +297,7 @@ function scheduleInverterJob(userId, userPlan, inverterId, currentCheckTime, las
     // do not put any code here in order to keep jobDelayMs as precise as possible
 
     jobs[inverterId] = setTimeout(inverterJob, jobDelayMs, userId, userPlan, inverterId, currentCheckTime, jobCallsNumSinceHit + 1);
-    logInfo(`job took ${Math.round(jobTookMs / 10) / 100}s, planned advance ${jobAdvanceMs / 1000}s (after ${jobCallsNumSinceHit} calls since hit), next job scheduled in ${Math.round(jobDelayMs / 10) / 100}s`);
+    logInfo(`scheduler: job took ${Math.round(jobTookMs / 10) / 100}s, planned advance ${jobAdvanceMs / 1000}s (after ${jobCallsNumSinceHit} calls since hit), next job scheduled in ${Math.round(jobDelayMs / 10) / 100}s`);
 }
 
 function countJobAdvance(callsNumSinceHit) {
@@ -305,11 +324,6 @@ async function inverterJob(userId, userPlan, inverterId, lastCheckTime, callsNum
         const targets = await semsportal.getStationHistoryCurrentData(inverterId, uniqueMetricIds, lastCheckTime, providerAccessTokens[userId]);
 
         if (targets) {
-            targets.forEach((t) => {
-                const currentData = t.datas?.at(-1);
-                logDebug(`current ${t.target_name} data: ${currentData ? JSON.stringify(currentData) : 'unavailable'}`);
-            });
-
             triggerIdsToNotify = tIds.filter((tId) => {
                 const tData = triggerData[tId];
                 const targetKey = tData.triggerFields.inverter_metric_id.split('&')[1].split('|')[1];
@@ -317,7 +331,7 @@ async function inverterJob(userId, userPlan, inverterId, lastCheckTime, callsNum
 
                 const currentData = target?.datas?.at(-1);
                 const ret = semsportal.isMetricLimitCrossed(tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value);
-                logDebug('isMetricLimitCrossed:', tData.triggerName, currentData?.value, tData.metricLastValue, tData.triggerFields.limit_value, ret);
+                logDebug(`${tData.triggerName}: ${target?.target_name}: currentData ${JSON.stringify(currentData)}, prevValue: ${tData.metricLastValue}, limit: ${tData.triggerFields.limit_value}, isCrossed: ${ret}`);
 
                 if (currentData?.value == tData.triggerFields.limit_value) {
                     // when the metric lands on the limit but bounces back above, this prevents triggering metric_exceeded without previously triggering metric_dropped_below (and vice versa)
