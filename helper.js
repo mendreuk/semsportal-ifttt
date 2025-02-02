@@ -90,15 +90,17 @@ export async function callHttpJson(method, url, headers, payload) {
         async (res) => {
             [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
 
+            const bodyMaxLen = 30000; // max is 100k
+            const bodyTrunc = res.body.length > bodyMaxLen ? res.body?.substring(0, bodyMaxLen) + '...[TRUNCATED]' : res.body;
             if (res.status >= 200 && res.status < 300) {
-                logInfo(`<res ${res.status} ${url}<:`, res.body);
+                logInfo(`<res ${res.status} ${url} (${res.body.length / 1000} kB)<:`, bodyTrunc);
                 try {
                     response = JSON.parse(res.body);
                 } catch (e) {
                     throwError(502, 'Invalid response body');
                 }
             } else {
-                logError(`<res ${res.status} ${url}<:`, res.body);
+                logError(`<res ${res.status} ${url}<:`, bodyTrunc);
                 throwError(502, 'Error status received');
             }
         },

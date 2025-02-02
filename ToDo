@@ -1,12 +1,13 @@
-- otestovat priblizovani upload OR advance OR shut OR currentCheckTime
-- otestovat smazani hesla z auth0 a reconnectu
-- otestovat bezplatneho usera
+- precis guidelines https://ifttt.com/docs/guidelines
 - pri review pred nasazenim do produ mozna bude problem s prihlasovanim https://ifttt.com/docs/guidelines#authentication
+- po review vratit do auth0 loginu hlasku 'Sign in with your credentials for https://semsportal.com'
 
-- pred uplynutim expirace subskripce bude potreba nejaky job, ktery bude emailovat na prodlouzeni
+- job na zalohovani useru, jejich hesel a planu
+- pred uplynutim expirace planu bude potreba nejaky job, ktery bude emailovat na prodlouzeni
 - v logu se objevovalo 429 (dosly instance), protoze mam nastaveno max 1 - mozna to ale bylo jen kvuli castym redeployum
 - po mesici rozumneho trafiku zkusit nechat Recommender vyhodnotit, jestli neprejit na instance-based billing, mozna pro me bude vhodnejsi https://cloud.google.com/run/docs/configuring/billing-settings?hl=en
 
++ pokud dojde ke smazani planu usera, tak pri refreshi tokenu se vytvori plan znovu, takze do api nikdy nedorazi user bez planu 
 + z nejake predpovedi pocasi bych zjistil vychod a zapad slunce a vetsinu metrik nedava smysl checkovat v noci -> zatim resim prechodem do sleep rezimu (dotaz po 5 minutach)
 + abych nemusel definovat limit pro parabolu, dala by se pouzit priblizovaci funkce se dvema asymptotama podobna arctan(x): y = (2.5 (x - 20)) / sqrt((x - 20)² + 10) + 2.5 (viz. https://www.geogebra.org/graphing)
 + google cloud run instance bezi vzdy v UTC nezavisle na regionu, kde jsou nadeployovane
