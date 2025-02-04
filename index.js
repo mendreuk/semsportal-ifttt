@@ -49,7 +49,9 @@ api.use(function setLogTraceAndComponents(req, res, next) {
                 [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
             } else if (req.method === 'DELETE') { // trigger DELETE request
                 triggerId = req.path.substring(req.path.lastIndexOf('/') + 1);
-                [inverterId, metricId] = triggerData[triggerId].triggerFields.inverter_metric_id.split('&')
+                if (triggerData[triggerId]) {
+                    [inverterId, metricId] = triggerData[triggerId].triggerFields.inverter_metric_id.split('&');
+                }
             }
             if (triggerId) {
                 addLogComponents({
