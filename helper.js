@@ -101,7 +101,7 @@ export async function callHttpJson(method, url, headers, payload) {
                 }
             } else {
                 logError(`<res ${res.status} ${url}<:`, bodyTrunc);
-                throwError(502, 'Error status received');
+                throwError(res.status, 'Error status received');
             }
         },
         async (error) => {

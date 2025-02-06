@@ -218,7 +218,11 @@ api.use(function errorHandler(err, req, res, next) {
     });
 });
 
-startUsersTriggers();
+try {
+    await startUsersTriggers();
+} catch (err) {
+    logError('Error starting users triggers, check the authentication configuration: ', err.status, err.message);
+}
 
 async function startUsersTriggers() {
     const usersWithPlan = await auth0.getUsersWithPlan();
