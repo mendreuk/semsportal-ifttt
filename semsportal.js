@@ -36,6 +36,8 @@ async function trigger(req, res) {
                         j = i - 1;
                     }
                 }
+            } else {
+                logDebug('return of obsolete triggers suppressed');
             }
         }
 
