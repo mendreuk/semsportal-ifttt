@@ -28,8 +28,7 @@ async function trigger(req, res) {
                 // when the metric is volatile, this avoids getting stuck in the wrong state in case one trigger type overtakes the other
                 // v1^3v2 or ^1v3^2 - when no.3 is being processed after no.2, better do not return triggerData at all
 
-                let i = j = semsData.length - 1;
-                for (; i > 0 && triggerData.length < triggerDataLimit; i--) {
+                for (let i = semsData.length - 1, j = i; i > 0 && triggerData.length < triggerDataLimit; i--) {
                     if (semsData[i - 1].value != req.body.triggerFields.limit_value) {
                         if (isMetricLimitCrossed(triggerName, semsData[j].value, semsData[i - 1].value, req.body.triggerFields.limit_value)) {
                             triggerData.push(createIFTTTTriggerData(semsRespBody, semsData[j], req.body.triggerFields.limit_value, tzOffset));
