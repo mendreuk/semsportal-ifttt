@@ -1,6 +1,6 @@
 - precist guidelines https://ifttt.com/docs/guidelines
 - pri review pred nasazenim do produ mozna bude problem s prihlasovanim https://ifttt.com/docs/guidelines#authentication
-- po review vratit do auth0 loginu hlasku 'Sign in with your credentials for https://semsportal.com'
+- po review dat do auth0 loginu hlasku 'Sign in with your credentials for https://semsportal.com'
 
 - job na zalohovani useru, jejich hesel a planu
 - pred uplynutim expirace planu bude potreba nejaky job, ktery bude emailovat na prodlouzeni

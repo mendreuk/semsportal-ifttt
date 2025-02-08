@@ -36,7 +36,7 @@ api.use(function setLogTraceAndComponents(req, res, next) {
             });
 
             const authHeader = req.get('Authorization');
-            if (authHeader && authHeader.startsWith('Bearer ')) {
+            if (authHeader && authHeader.startsWith('Bearer ') && authHeader.split('.')[1]) {
                 const userId = JSON.parse(Buffer.from(authHeader.split('.')[1], "base64").toString("utf8")).sub;
                 addLogComponents({
                     userId: userId

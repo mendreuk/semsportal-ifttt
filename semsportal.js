@@ -18,32 +18,33 @@ async function trigger(req, res) {
         const startTime = nowLocalTzString.slice(0, 10) + ' 00:00';
         const endTime = nowLocalTzString.slice(0, 10) + ' 23:59';
 
-        const semsRespBody = await getStationHistoryDataChart(inverterId, [metricId], getUserFromToken(req).auth.access_token, startTime, endTime);
+        if (req.get('IFTTT-Test-Mode') !== '1') {
+            const semsRespBody = await getStationHistoryDataChart(inverterId, [metricId], getUserFromToken(req).auth.access_token, startTime, endTime);
 
-        const semsData = semsRespBody.data.list?.[0].inverters?.[0].targets?.[0].datas;
-        if (semsData && semsData.length > 0) {
-            const triggerName = getTriggerName(req);
-            if (isMetricLimitSatisfied(triggerName, semsData.at(-1).value, req.body.triggerFields.limit_value)) {
-                // always return fresh triggerData only
-                // when the metric is volatile, this avoids getting stuck in the wrong state in case one trigger type overtakes the other
-                // v1^3v2 or ^1v3^2 - when no.3 is being processed after no.2, better do not return triggerData at all
+            const semsData = semsRespBody.data.list?.[0].inverters?.[0].targets?.[0].datas;
+            if (semsData && semsData.length > 0) {
+                const triggerName = getTriggerName(req);
+                if (isMetricLimitSatisfied(triggerName, semsData.at(-1).value, req.body.triggerFields.limit_value)) {
+                    // always return fresh triggerData only
+                    // when the metric is volatile, this avoids getting stuck in the wrong state in case one trigger type overtakes the other
+                    // v1^3v2 or ^1v3^2 - when no.3 is being processed after no.2, better do not return triggerData at all
 
-                for (let i = semsData.length - 1, j = i; i > 0 && triggerData.length < triggerDataLimit; i--) {
-                    if (semsData[i - 1].value != req.body.triggerFields.limit_value) {
-                        if (isMetricLimitCrossed(triggerName, semsData[j].value, semsData[i - 1].value, req.body.triggerFields.limit_value)) {
-                            triggerData.push(createIFTTTTriggerData(semsRespBody, semsData[j], req.body.triggerFields.limit_value, tzOffset));
+                    for (let i = semsData.length - 1, j = i; i > 0 && triggerData.length < triggerDataLimit; i--) {
+                        if (semsData[i - 1].value != req.body.triggerFields.limit_value) {
+                            if (isMetricLimitCrossed(triggerName, semsData[j].value, semsData[i - 1].value, req.body.triggerFields.limit_value)) {
+                                triggerData.push(createIFTTTTriggerData(semsRespBody, semsData[j], req.body.triggerFields.limit_value, tzOffset));
+                            }
+                            j = i - 1;
                         }
-                        j = i - 1;
                     }
+                } else {
+                    logDebug('return of obsolete triggers suppressed');
                 }
-            } else {
-                logDebug('return of obsolete triggers suppressed');
             }
-        }
-
-        if (req.get('IFTTT-Test-Mode') === '1') {
+        } else {
             // when being tested, top the data with fakes up to 3 items
             for (let i = 0; triggerData.length < triggerDataLimit && triggerData.length < 3; i++) {
+                const semsRespBody = { data: { list: [{ pw_name: 'FakePowerStation', inverters: [{ name: 'FakeInverter', targets: [{ target_name: 'FakeTarget', target_unit: 'FakeUnit' }] }] }] } };
                 const semsData = { stat_date: '12/24/2024 20:00', value: -1 * i };
                 triggerData.push(createIFTTTTriggerData(semsRespBody, semsData, req.body.triggerFields.limit_value, tzOffset));
             }
@@ -90,25 +91,31 @@ async function getStationHistoryDataChart(inverterId, metricIds, svcAccessToken,
 async function triggerOptions(req, res) {
     const inverterOptionsData = [];
 
-    const semsRespBody = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/PowerStationMonitor/QueryPowerStationMonitor', { Token: getUserFromToken(req).auth.access_token }, createQueryPowerStationMonitorPayload());
-    checkResponseCode(semsRespBody);
+    if (req.get('IFTTT-Test-Mode') !== '1') {
+        const semsRespBody = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v0/PowerStationMonitor/QueryPowerStationMonitor', { Token: getUserFromToken(req).auth.access_token }, createQueryPowerStationMonitorPayload());
+        checkResponseCode(semsRespBody);
 
-    if (semsRespBody.data.list) {
-        for (const ps of semsRespBody.data.list) {
-            const semsRespBody2 = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v2/PowerStation/GetMonitorDetailByPowerstationId', { Token: getUserFromToken(req).auth.access_token }, createGetMonitorDetailByPowerstationIdPayload(ps.powerstation_id));
-            checkResponseCode(semsRespBody);
+        if (semsRespBody.data.list) {
+            for (const ps of semsRespBody.data.list) {
+                const semsRespBody2 = await callHttpJson('POST', SEMS_PORTAL_API_BASEURL + 'v2/PowerStation/GetMonitorDetailByPowerstationId', { Token: getUserFromToken(req).auth.access_token }, createGetMonitorDetailByPowerstationIdPayload(ps.powerstation_id));
+                checkResponseCode(semsRespBody);
 
-            const powerStationTz = find(ps.latitude, ps.longitude);
-            const powerStationTzOffset = getOffsetFromTz(powerStationTz);
+                const powerStationTz = find(ps.latitude, ps.longitude);
+                const powerStationTzOffset = getOffsetFromTz(powerStationTz);
 
-            semsRespBody2.data.inverter?.forEach((i) => {
-                const metricOptionsData = [];
-                i.points?.forEach((t) => {
-                    metricOptionsData.push(createMetricIFTTTOptionsData(ps.powerstation_id, powerStationTzOffset, i.sn, t.target_index, t.target_key, t.display));
+                semsRespBody2.data.inverter?.forEach((i) => {
+                    const metricOptionsData = [];
+                    i.points?.forEach((t) => {
+                        metricOptionsData.push(createMetricIFTTTOptionsData(ps.powerstation_id, powerStationTzOffset, i.sn, t.target_index, t.target_key, t.display));
+                    });
+                    inverterOptionsData.push(createInverterIFTTTOptionsData(ps.stationname, i.name, metricOptionsData));
                 });
-                inverterOptionsData.push(createInverterIFTTTOptionsData(ps.stationname, i.name, metricOptionsData));
-            });
+            }
         }
+    } else {
+        const metricOptionsData = [];
+        metricOptionsData.push(createMetricIFTTTOptionsData('FakePowerStationId', '+0100', 'FakeInverterSN', 1, 'FakeTargetKey', 'FakeTargetDispl'));
+        inverterOptionsData.push(createInverterIFTTTOptionsData('FakePowerStation', 'FakeInverter', metricOptionsData));
     }
 
     res.status(200).send({
