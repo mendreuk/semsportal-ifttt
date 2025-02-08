@@ -218,6 +218,8 @@ api.use(function errorHandler(err, req, res, next) {
     });
 });
 
+logInfo(`STARTING semsportal-ifttt api in ${process.env.NODE_ENV} mode`);
+
 try {
     await startUsersTriggers();
 } catch (err) {

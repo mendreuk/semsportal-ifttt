@@ -72,7 +72,7 @@ function isMetricLimitCrossed(triggerName, metricCurrentValue, metricPreviousVal
 async function getStationHistoryCurrentData(inverterId, metricIds, lastCheckTime, svcAccessToken) {
     const tzOffset = inverterId.split('|')[1];
     const nowLocalTzString = tzDateToISOString(Date.now(), tzOffset);
-    const startTime = (lastCheckTime) ? new Date(lastCheckTime).toISOString().slice(0, 16) : nowLocalTzString.slice(0, 10) + ' 00:00';
+    const startTime = (lastCheckTime) ? new Date(lastCheckTime).toISOString().replace('T', ' ').slice(0, 16) : nowLocalTzString.slice(0, 10) + ' 00:00';
     const endTime = nowLocalTzString.slice(0, 10) + ' 23:59';
     logDebug('semsportal req startTime:', startTime);
 
