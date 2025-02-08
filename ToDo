@@ -1,4 +1,3 @@
-- vyinstalovat prod auth0 do eu podle navodu
 - precist guidelines https://ifttt.com/docs/guidelines
 - pri review pred nasazenim do produ mozna bude problem s prihlasovanim https://ifttt.com/docs/guidelines#authentication
 - po review vratit do auth0 loginu hlasku 'Sign in with your credentials for https://semsportal.com'
@@ -8,6 +7,7 @@
 - v logu se objevovalo 429 (dosly instance), protoze mam nastaveno max 1 - mozna to ale bylo jen kvuli castym redeployum
 - po mesici rozumneho trafiku zkusit nechat Recommender vyhodnotit, jestli neprejit na instance-based billing, mozna pro me bude vhodnejsi https://cloud.google.com/run/docs/configuring/billing-settings?hl=en
 
++ asi bug v iffttu: vypada to, ze kdyz jsem vratil applet z archivu a znovu connectnul a potom zmenil limit, tak ifttt ho nechal stary a neposlal DELETE
 + pri nenalezenem heslu v app_metadatech (muze se stat jedine kdyz ho rucne smazu) se po logoutu redirectuje na ${event.transaction.redirect_uri} (coz je https://ifttt.com/channels/semsportal/authorize) -> pro uzivatele to vypada, ze kliknul na 'Begin test' nebo 'Reconnect' a nic se nestalo, protoze se vratil tam kde byl, ale na pozadi doslo k logoutu. Musi pak kliknout znovu pro login, coz vypada divne, ale lepsi redirect neznam. Varianta je bez redirectu, coz ho hodi na stranku OK.
 + pokud dojde ke smazani planu usera, tak pri refreshi tokenu se vytvori plan znovu, takze do api nikdy nedorazi user bez planu 
   - userove bez planu nejsou tak uplne otestovani
