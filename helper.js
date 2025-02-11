@@ -90,8 +90,8 @@ export async function callHttpJson(method, url, headers, payload) {
         async (res) => {
             [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
 
-            const bodyMaxLen = 95000; // entire log record cap is 100k
-            const bodyTrunc = res.body.length > bodyMaxLen ? res.body?.substring(0, bodyMaxLen) + '...[TRUNCATED]' : res.body;
+            const bodyMaxLen = 30000; // entire log record cap is 100k
+            const bodyTrunc = res.body.length > bodyMaxLen ? res.body?.slice(0, bodyMaxLen / 2) + '\n...[TRUNCATED]...\n' + res.body?.slice(- bodyMaxLen / 2): res.body;
             if (res.status >= 200 && res.status < 300) {
                 logInfo(`<res ${res.status} ${url} (${res.body.length / 1000} kB)<:`, bodyTrunc);
                 try {
