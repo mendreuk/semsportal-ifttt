@@ -1,24 +1,24 @@
 https://www.solar-station.cz/solar-station/
 
-SOLAX a Dražice přes www.solaxcloud.com
-GoodWe (AEG) přes www.semsportal.com
-Growatt přes server.growatt.com
-Victron přes vrm.victronenergy.com
-Alpha ESS přes cloud.alphaess.com
-SOFAR SOLAR a DEYE přes www.solarmanpv.com
-ČEZ BATTERY BOX přes www.oigpower.cz
-SUNWAYS přes www.sunways-portal.com
-WATTSONIC přes www.wattsonic.cloud
-SOLINTEG přes www.solinteg-cloud.com
-SOLAR EDGE přes monitoring.solaredge.com
-FOXESS přes www.foxesscloud.com
-SERMATEC přes www.sermatec-cloud.com
-HUAWEI přes www.eu5.fusionsolar.huawei.com - pozn. pokud máš instalaci bez baterie a bez přetoků (častá instalace FVE), pak SOLAR STATION bude zobrazovat jen jednu dlaždici.
-RCT POWER přes rct-portal.com
-HES, AES od AERS přes aes.aers.cz
-FRONIUS přes www.solarweb.com
-SUNGROW přes www.isolarcloud.com
-BENEKOV přes www.sermatec.cz
-ENERGYCLOUD přes my.energycloud.cz
-GETI přes pv.inteless.com
+   SOLAX a Dražice přes www.solaxcloud.com - api https://eu.solaxcloud.com/zeus/v1 data jsou base64 a pak nejak zakodovany
+1m GoodWe (AEG) přes www.semsportal.com
+   Growatt přes server.growatt.com
+   Victron přes vrm.victronenergy.com
+   Alpha ESS přes cloud.alphaess.com
+   SOFAR SOLAR a DEYE přes www.solarmanpv.com
+   ČEZ BATTERY BOX přes www.oigpower.cz
+1m SUNWAYS přes www.sunways-portal.com
+5m SOLINTEG přes www.solinteg-cloud.com
+   - WATTSONIC přes www.wattsonic.cloud -> api je na https://lb-eu.solinteg-cloud.com/gen2api/
+   SOLAR EDGE přes monitoring.solaredge.com
+   FOXESS přes www.foxesscloud.com
+   SERMATEC přes www.sermatec-cloud.com
+   HUAWEI přes www.eu5.fusionsolar.huawei.com
+   RCT POWER přes rct-portal.com
+   HES, AES od AERS přes aes.aers.cz
+   FRONIUS přes www.solarweb.com
+   SUNGROW přes www.isolarcloud.com
+   BENEKOV přes www.sermatec.cz
+   ENERGYCLOUD přes my.energycloud.cz
+   GETI přes pv.inteless.com
 
