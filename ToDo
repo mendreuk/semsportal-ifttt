@@ -1,6 +1,6 @@
-- precist guidelines https://ifttt.com/docs/guidelines
-- pri review pred nasazenim do produ mozna bude problem s prihlasovanim https://ifttt.com/docs/guidelines#authentication
-- po review dat do auth0 loginu hlasku 'Sign in with your credentials for https://semsportal.com'
+- disablovani appletu by slo vyresit:
+  1) zamkem https://help.ifttt.com/hc/en-us/articles/28665114445979-How-to-make-an-Applet-skip-if-it-has-recently-run
+  2) vytvorit action pro enable/disable cele connection a nebo kazdeho ze 2 triggeru v dane connection
 
 - job na zalohovani useru, jejich hesel a planu
 - pred uplynutim expirace planu bude potreba nejaky job, ktery bude emailovat na prodlouzeni
@@ -15,3 +15,10 @@
 + abych nemusel definovat limit pro parabolu, dala by se pouzit priblizovaci funkce se dvema asymptotama podobna arctan(x): y = (2.5 (x - 20)) / sqrt((x - 20)² + 10) + 2.5 (viz. https://www.geogebra.org/graphing)
 + google cloud run instance bezi vzdy v UTC nezavisle na regionu, kde jsou nadeployovane
 + triggeruju na hranu, ne na uroven
+
+
+status
+curl -v https://semsportal-ifttt-api-prod-qotwtgvfiq-ez.a.run.app/ifttt/v1/status -H'IFTTT-Service-Key: JJwcmqcDOBt7bOFtI4gVAbd0hRCv97W_YkHv50ZVvhKNbOSxdMcCGaY63ky0dEuK'
+
+my private ifttt applets
+https://ifttt.com/p/traktorist4/applets/archived

@@ -206,6 +206,13 @@ api.post('/ifttt/v1/triggers/metric_exceeds_limit', auth0.jwtCheck, userCheck, r
 api.post('/ifttt/v1/triggers/metric_exceeds_limit/fields/inverter_metric_id/options', auth0.jwtCheck, userCheck, semsportal.triggerOptions);
 api.delete('/ifttt/v1/triggers/metric_exceeds_limit/trigger_identity/:triggerId', auth0.jwtCheck, deleteTrigger);
 
+// connection related handlers
+const noop = () => {};
+api.post('/ifttt/v1/webhooks/connection/enabled', serviceKeyCheck, noop);
+api.post('/ifttt/v1/webhooks/connection/disabled', serviceKeyCheck, noop);
+api.post('/ifttt/v1/webhooks/connection/updated', serviceKeyCheck, noop);
+api.post('/ifttt/v1/webhooks/trigger_subscription/fired', serviceKeyCheck, noop);
+
 api.use(function errorHandler(err, req, res, next) {
     if (res.headersSent) {
         return next(err)
