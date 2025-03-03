@@ -70,9 +70,13 @@ export async function callHttpJson(method, url, headers, payload) {
     }
 
     const [globalLogFieldsTemp, globalLogComponentsTemp] = [globalLogFields, globalLogComponents];
+    logDebug('keeping', globalLogFields, globalLogComponents);
 
     let response;
     await new Promise((resolve, reject) => {
+        [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
+        logDebug('restored', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
+
         const req = https.request(url, options, (res) => {
             res.setEncoding('utf8');
             let body = '';
@@ -89,9 +93,10 @@ export async function callHttpJson(method, url, headers, payload) {
     }).then(
         async (res) => {
             [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
+            logDebug('restored', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
 
             const bodyMaxLen = 30000; // entire log record cap is 100k
-            const bodyTrunc = res.body.length > bodyMaxLen ? res.body?.slice(0, bodyMaxLen / 2) + '\n...[TRUNCATED]...\n' + res.body?.slice(- bodyMaxLen / 2): res.body;
+            const bodyTrunc = res.body.length > bodyMaxLen ? res.body?.slice(0, bodyMaxLen / 2) + '\n...[TRUNCATED]...\n' + res.body?.slice(- bodyMaxLen / 2) : res.body;
             if (res.status >= 200 && res.status < 300) {
                 logInfo(`<res ${res.status} ${url} (${res.body.length / 1000} kB)<:`, bodyTrunc);
                 try {
@@ -106,6 +111,7 @@ export async function callHttpJson(method, url, headers, payload) {
         },
         async (error) => {
             [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
+            logDebug('restored', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
 
             logError(`>req error ${url}>:`, error);
             throwError(502, 'Request error');
