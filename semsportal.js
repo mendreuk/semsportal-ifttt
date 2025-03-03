@@ -63,11 +63,11 @@ function isMetricLimitSatisfied(triggerName, metricCurrentValue, limitValue) {
 }
 
 function isMetricLimitCrossed(triggerName, metricCurrentValue, metricPreviousValue, limitValue) {
-    const metricCurrentValueNum = Number(metricCurrentValue),
-        metricPreviousValueNum = Number(metricPreviousValue),
-        limitValueNum = Number(limitValue);
-    return ((triggerName === 'metric_exceeds_limit' && metricCurrentValueNum != null && metricCurrentValueNum > limitValueNum && metricPreviousValueNum != null && metricPreviousValueNum <= limitValueNum)
-        || (triggerName === 'metric_drops_below_limit' && metricCurrentValueNum != null && metricCurrentValueNum < limitValueNum && metricPreviousValueNum != null && metricPreviousValueNum >= limitValueNum));
+    const metricCurrentValueNum = typeof metricCurrentValue !== 'undefined' && metricCurrentValue != null ? Number(metricCurrentValue) : null;
+    const metricPreviousValueNum = typeof metricPreviousValue !== 'undefined' && metricPreviousValue != null ? Number(metricPreviousValue) : null;
+    const limitValueNum = typeof limitValue !== 'undefined' && limitValue != null ? Number(limitValue) : null;
+    return (triggerName === 'metric_exceeds_limit' && metricCurrentValueNum != null && metricCurrentValueNum > limitValueNum && metricPreviousValueNum != null && metricPreviousValueNum <= limitValueNum)
+        || (triggerName === 'metric_drops_below_limit' && metricCurrentValueNum != null && metricCurrentValueNum < limitValueNum && metricPreviousValueNum != null && metricPreviousValueNum >= limitValueNum);
 }
 
 async function getStationHistoryCurrentData(inverterId, metricIds, lastCheckTime, svcAccessToken) {
