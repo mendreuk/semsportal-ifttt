@@ -1,10 +1,11 @@
 import https from 'https';
 
 const PROJECT = "semsportalifttt";
-let globalLogFields = {};
+let globalLogFields;
 let globalLogComponents;
 
 export function setLogTrace(trace) {
+    globalLogFields = {};
     globalLogFields['logging.googleapis.com/trace'] = `projects/${PROJECT}/traces/${trace}`;
     globalLogComponents = {};
 }
@@ -70,12 +71,12 @@ export async function callHttpJson(method, url, headers, payload) {
     }
 
     const [globalLogFieldsTemp, globalLogComponentsTemp] = [globalLogFields, globalLogComponents];
-    logDebug('keeping', globalLogFields, globalLogComponents);
+    logDebug('k', globalLogFields, globalLogComponents);
 
     let response;
     await new Promise((resolve, reject) => {
         [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
-        logDebug('restored', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
+        logDebug('rq', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
 
         const req = https.request(url, options, (res) => {
             res.setEncoding('utf8');
@@ -93,7 +94,7 @@ export async function callHttpJson(method, url, headers, payload) {
     }).then(
         async (res) => {
             [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
-            logDebug('restored', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
+            logDebug('rs', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
 
             const bodyMaxLen = 30000; // entire log record cap is 100k
             const bodyTrunc = res.body.length > bodyMaxLen ? res.body?.slice(0, bodyMaxLen / 2) + '\n...[TRUNCATED]...\n' + res.body?.slice(- bodyMaxLen / 2) : res.body;
@@ -111,7 +112,7 @@ export async function callHttpJson(method, url, headers, payload) {
         },
         async (error) => {
             [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
-            logDebug('restored', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
+            logDebug('e', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
 
             logError(`>req error ${url}>:`, error);
             throwError(502, 'Request error');
