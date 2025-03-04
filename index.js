@@ -313,7 +313,10 @@ function checkPlanHasExpired(userId) {
  */
 function scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime, jobCallsNumSinceHit, lastJobStartTime) {
     const userPlan = checkPlanHasExpired(userId);
-    logDebug(`scheduler: jobCallsNumSinceHit: ${jobCallsNumSinceHit}, currentCheckTime: ${currentCheckTime}, lastCheckTime: ${lastCheckTime}`);
+
+    const currentCheckMin = currentCheckTime != null ? Number(currentCheckTime.slice(-2)) : null;
+    const estimatedUploadMin = lastCheckTime != null ? (Number(lastCheckTime.slice(-2)) + (userPlan.check_period_sec / 60) - 1) % 60 : null;
+    logDebug(`scheduler: jobCallsNumSinceHit: ${jobCallsNumSinceHit}, currentCheckTime: ${currentCheckTime}, lastCheckTime: ${lastCheckTime}, estimatedUploadMin: ${estimatedUploadMin}`);
 
     const jobFixedDelayMs = userPlan.check_period_sec * 1000;
     const jobSleepDelayMs = Math.min(jobFixedDelayMs * 5, 10 * 60 * 1000);
@@ -324,7 +327,7 @@ function scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime
     // - some useful time during the daylight
     // - the last value measured when the inverter shuts down until the midnight
     // - null after startup or when the semsportal call timeouts (usually takes longer to recover)
-    if (currentCheckTime === lastCheckTime) {
+    if (currentCheckMin === estimatedUploadMin) {
         if (jobCallsNumSinceHit == 1 || jobCallsNumSinceHit == JOB_INIT_CALLS_NUM + 1) {
             logInfo('scheduler: inverter is probably shut down or semsportal is temporarily unavailable');
             jobCallsNumSinceHit = JOB_INIT_CALLS_NUM;
