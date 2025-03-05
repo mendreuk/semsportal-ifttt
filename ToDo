@@ -1,4 +1,5 @@
-- porad mam spatne schovavani a restorovani logovacich dat v helperu
+- doresit scheduling a rozhodovani - nefunguje uspani pro 5-ti minutovy interval
+- sledovat uchovavani a restorovani logovacich dat v helperu
 - obcas gcloud restartuje pod, ale pamet se statistikou zustane..divny
 - disablovani appletu by slo vyresit:
   1) zamkem https://help.ifttt.com/hc/en-us/articles/28665114445979-How-to-make-an-Applet-skip-if-it-has-recently-run

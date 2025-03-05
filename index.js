@@ -207,7 +207,7 @@ api.post('/ifttt/v1/triggers/metric_exceeds_limit/fields/inverter_metric_id/opti
 api.delete('/ifttt/v1/triggers/metric_exceeds_limit/trigger_identity/:triggerId', auth0.jwtCheck, deleteTrigger);
 
 // connection related handlers
-const noop = () => {};
+const noop = () => { };
 api.post('/ifttt/v1/webhooks/connection/enabled', serviceKeyCheck, noop);
 api.post('/ifttt/v1/webhooks/connection/disabled', serviceKeyCheck, noop);
 api.post('/ifttt/v1/webhooks/connection/updated', serviceKeyCheck, noop);
@@ -327,18 +327,17 @@ function scheduleInverterJob(userId, inverterId, currentCheckTime, lastCheckTime
     // - some useful time during the daylight
     // - the last value measured when the inverter shuts down until the midnight
     // - null after startup or when the semsportal call timeouts (usually takes longer to recover)
-    if (currentCheckMin === estimatedUploadMin) {
-        if (jobCallsNumSinceHit == 1 || jobCallsNumSinceHit == JOB_INIT_CALLS_NUM + 1) {
-            logInfo('scheduler: inverter is probably shut down or semsportal is temporarily unavailable');
-            jobCallsNumSinceHit = JOB_INIT_CALLS_NUM;
-            jobBaseDelayMs = jobSleepDelayMs;
-        } else if (currentCheckTime) {
-            logInfo(`scheduler: inverter upload time hit after ${jobCallsNumSinceHit} calls`);
-            jobCallsNumSinceHit = 0;
-            jobBaseDelayMs += JOB_ONE_TIME_OFFSET_MS;
-        } else {
-            jobCallsNumSinceHit = 0;
-        }
+    if (currentCheckTime === lastCheckTime && (jobCallsNumSinceHit == 1 || jobCallsNumSinceHit == JOB_INIT_CALLS_NUM + 1)) {
+        logInfo('scheduler: inverter is probably shut down or semsportal is temporarily unavailable');
+        jobCallsNumSinceHit = JOB_INIT_CALLS_NUM;
+        jobBaseDelayMs = jobSleepDelayMs;
+    } else if (currentCheckMin === estimatedUploadMin && currentCheckTime) {
+        logInfo(`scheduler: inverter upload time hit after ${jobCallsNumSinceHit} calls`);
+        jobCallsNumSinceHit = 0;
+        jobBaseDelayMs += JOB_ONE_TIME_OFFSET_MS;
+    } else if (currentCheckTime === lastCheckTime) {
+        // if they are equal even the next time, consider the inverter shut down
+        jobCallsNumSinceHit = 0;
     }
 
     const jobAdvanceMs = countJobAdvance(jobCallsNumSinceHit);
