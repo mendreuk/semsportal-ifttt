@@ -71,12 +71,10 @@ export async function callHttpJson(method, url, headers, payload) {
     }
 
     const [globalLogFieldsTemp, globalLogComponentsTemp] = [globalLogFields, globalLogComponents];
-    logDebug('k', globalLogFields, globalLogComponents);
 
     let response;
     await new Promise((resolve, reject) => {
         [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
-        logDebug('rq', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
 
         const req = https.request(url, options, (res) => {
             res.setEncoding('utf8');
@@ -94,7 +92,6 @@ export async function callHttpJson(method, url, headers, payload) {
     }).then(
         async (res) => {
             [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
-            logDebug('rs', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
 
             const bodyMaxLen = 30000; // entire log record cap is 100k
             const bodyTrunc = res.body.length > bodyMaxLen ? res.body?.slice(0, bodyMaxLen / 2) + '\n...[TRUNCATED]...\n' + res.body?.slice(- bodyMaxLen / 2) : res.body;
