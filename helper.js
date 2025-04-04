@@ -109,7 +109,6 @@ export async function callHttpJson(method, url, headers, payload) {
         },
         async (error) => {
             [globalLogFields, globalLogComponents] = [globalLogFieldsTemp, globalLogComponentsTemp];
-            logDebug('e', JSON.stringify(globalLogFields), JSON.stringify(globalLogComponents));
 
             logError(`>req error ${url}>:`, error);
             throwError(502, 'Request error');
