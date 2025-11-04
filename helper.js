@@ -55,7 +55,7 @@ export async function callHttpJson(method, url, headers, payload) {
             'Connection': 'close'
         },
         method: method,
-        timeout: 3000
+        timeout: 5000
     };
     options.headers = {
         ...options.headers,
