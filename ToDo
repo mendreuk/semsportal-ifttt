@@ -5,6 +5,22 @@
 - pred uplynutim expirace planu bude potreba nejaky job, ktery bude emailovat na prodlouzeni
 - v logu se objevovalo 429 (dosly instance), protoze mam nastaveno max 1 - mozna to ale bylo jen kvuli castym redeployum
 
+placena subskripce
+- semsportal ma docela velkou chybovost a nespolehlivost, takze subsckripce asi neni dobrej napad
+- a kdyby jo, tak vybrat nejakou paywall jako stripe, chargebee, paddle
+- musi umet API, platebni branu, vystavit fakturu, mit domicil v EU kvuli DPH
+https://stripe.com/en-cz/pricing
+https://www.chargebee.com/pricing/
+https://www.paddle.com/pricing
+
+- prvni mesic zdarma, pak vynutit refresh tokenu a prihlaseni, presmerovat na paywall formular
+https://stripe.com/en-cz/payments/elements
+https://docs.stripe.com/api/subscriptions/create
+https://docs.stripe.com/products-prices/pricing-models
+
+- dan z prijmu neni problem, to je asi normalni prijem z podnikani a je jedno ze je z ciziny
+- DPH - One Stop Shop - pro zakazniky z EU (a mozna i z tretich zemi) https://financnisprava.gov.cz/cs/mezinarodni-spoluprace/mezinarodni-spoluprace-a-dph/one-stop-shop-oss
+- musel bych kazdemu zakaznikovi umet vystavit fakturu, ale musel bych se ptat, jestli je nebo neni platce DPH a podle toho vest ucetnictvi
 
 + po mesici rozumneho trafiku zkusit nechat Recommender vyhodnotit, jestli neprejit na instance-based billing - urcite ne, ten stoji asi 38Kc/den https://cloud.google.com/run/docs/configuring/billing-settings?hl=en
 + stridace s podporou baterie nikdy neprejdou do nocniho shutdownu (napr. tatuv)
