@@ -7,7 +7,7 @@ const SEMS_PORTAL_API_BASEURL = 'https://eu.semsportal.com/api/';
 const WHEN_QUERY_OPTS = {
     'now': {
         label: 'Now',
-        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 5 * 60 * 1000, tzOffset).slice(0, 16),
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 11 * 60 * 1000, tzOffset).slice(0, 16),
         endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate, tzOffset).slice(0, 16)
     },
     'hour': {
@@ -279,7 +279,7 @@ async function query(req, res) {
 
             const semsData = semsRespBody.data.list?.[0].inverters?.[0].targets?.[0].datas;
             if (semsData && semsData.length > 0) {
-                for (let i = 0; i < semsData.length; i--) {
+                for (let i = 0; i < semsData.length; i++) {
                     queryData.push(createIFTTTQueryData(semsRespBody, semsData[i], tzOffset));
                 }
                 if (req.body.queryFields.when == 'now') {
