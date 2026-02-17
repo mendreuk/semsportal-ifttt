@@ -16,5 +16,7 @@ curl -X POST "https://semsportal-ifttt-api-prod-331310863393.europe-west4.run.ap
   "ifttt_source": {
     "id": "d55f4d9125c1dfc2",
     "url": "http://example.com/d55f4d9125c1dfc2"
-  }
+  },
+  "cursor":"5|50"
 }'
+

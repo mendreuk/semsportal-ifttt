@@ -269,10 +269,10 @@ async function query(req, res) {
         const [inverterId, metricId] = req.body.queryFields.inverter_metric_id.split('&');
         const tzOffset = inverterId.split('|')[1];
         const whenFn = WHEN_QUERY_OPTS[req.body.queryFields.when];
-        const nowDate = new Date();
+        const nowDate = Date.now();
         const startTime = whenFn.startTime(nowDate, tzOffset);
         const endTime = whenFn.endTime(nowDate, tzOffset);
-        logDebug('when: ' + req.body.queryFields.when + ', tzOffset: ' + tzOffset + ', startTime: ' + startTime + ', endTime: ' + endTime);
+        logDebug('when: ' + whenFn.label + ', tzOffset: ' + tzOffset + ', startTime: ' + startTime + ', endTime: ' + endTime);
 
         if (req.get('IFTTT-Test-Mode') !== '1') {
             const semsRespBody = await getStationHistoryDataChart(inverterId, [metricId], getUserFromToken(req).auth.access_token, startTime, endTime);
