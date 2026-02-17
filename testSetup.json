@@ -46,7 +46,7 @@
 
 {
     "data": {
-        "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IjRPMGZCb3BWcGViTmFPcUIzZXBYaSJ9.eyJodHRwczovL2lmdHR0LmNvbS9zZW1zcG9ydGFsL3VzZXIiOnsiYXV0aCI6eyJhY2Nlc3NfdG9rZW4iOiJleUoxYVdRaU9pSTFaalkyWWpObFpTMDJaREJpTFRRMll6UXRZbVpqWlMxaFlqZzJaV05sTUdNMVltTWlMQ0owYVcxbGMzUmhiWEFpT2pFM05EQTNOakUyT0RZeE5EVXNJblJ2YTJWdUlqb2lNelZtWW1NeE0yWmxNREZtWVRjMVpHUXpPV1ZoTldVM1ptWTNZbUpqWm1FaUxDSmpiR2xsYm5RaU9pSnBiM01pTENKMlpYSnphVzl1SWpvaWRqTXVNU0lzSW14aGJtZDFZV2RsSWpvaVpXNGlmUT09In0sImVtYWlsIjoicGV0ci5yZWhhcUBnbWFpbC5jb20iLCJwbGFuIjp7ImNoZWNrX3BlcmlvZF9zZWMiOjYwLCJjcmVhdGVkX2F0IjoxNzM4OTY3NDQxNTU3LCJleHBpcmVzX2F0IjoxNzcwNTAzNDQxNTU3fX0sImlzcyI6Imh0dHBzOi8vZGV2LTE1aHI4d3ZhaGYyem03ajAuZXUuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfDVmNjZiM2VlLTZkMGItNDZjNC1iZmNlLWFiODZlY2UwYzViYyIsImF1ZCI6WyJzZW1zcG9ydGFsLWlmdHR0IiwiaHR0cHM6Ly9kZXYtMTVocjh3dmFoZjJ6bTdqMC5ldS5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNzQwNzYxNjg2LCJleHAiOjE3NDA4NDgwODYsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwgb2ZmbGluZV9hY2Nlc3MiLCJhenAiOiJwWkZ5bkp4ZTFQYTdnVmdYeFNnbzN0eHJiQWh0OWw3ViJ9.LKLgwd3soB34Fstr_JkwfhHfj9uSt0PDeGCO9kENIl5UkvUO1m48Q3rGBw_hgiYpU1T_ERLY0iGdu6FdlTYxpu_tr5H0oiOIs9BpIy3O2nASXdPw1PVDWad3vK0v48MKeyuIofKmRsW2y6tNizOr41o16VYcXa9rKwjKyHNmhz4SxB92KqnbWDU7mUHEXcp3KZ1TEiFIEAKayyO4o0zvFlChiP69L36BK9YJ2dALj3qWDfxG_nIpRWrR6dNRc6BqeVBw9nPJup-8fDq-e4BAwbf-kJtAFhKrVPKiv_-w3mcAGcMPrZc5CznQI5tUmiYKx3Kk5YwAKrQ8-sujqCSmIw",
+        "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlV2Nl9VVWpCel9ISjZhdWZzeVlHQiJ9.eyJodHRwczovL2lmdHR0LmNvbS9zZW1zcG9ydGFsL3VzZXIiOnsiYXV0aCI6eyJhY2Nlc3NfdG9rZW4iOiJleUoxYVdRaU9pSTFaalkyWWpObFpTMDJaREJpTFRRMll6UXRZbVpqWlMxaFlqZzJaV05sTUdNMVltTWlMQ0owYVcxbGMzUmhiWEFpT2pFM056RXpNamMyTlRVek5UY3NJblJ2YTJWdUlqb2laREJsWmpabU4yRTVORFUyWVRCalpXWXpaVFJqTW1KaFpURTVPRGM0T1RJaUxDSmpiR2xsYm5RaU9pSnBiM01pTENKMlpYSnphVzl1SWpvaWRqTXVNU0lzSW14aGJtZDFZV2RsSWpvaVpXNGlmUT09In0sImVtYWlsIjoicGV0ci5yZWhhcUBnbWFpbC5jb20iLCJwbGFuIjp7ImNoZWNrX3BlcmlvZF9zZWMiOjMwMCwiY3JlYXRlZF9hdCI6MTc3MTMyNjU4NzU5N319LCJpc3MiOiJodHRwczovL2Rldi1jaHg1MGxwNzQ2emYyeGZsLmV1LmF1dGgwLmNvbS8iLCJzdWIiOiJhdXRoMHw1ZjY2YjNlZS02ZDBiLTQ2YzQtYmZjZS1hYjg2ZWNlMGM1YmMiLCJhdWQiOlsic2Vtc3BvcnRhbC1pZnR0dCIsImh0dHBzOi8vZGV2LWNoeDUwbHA3NDZ6ZjJ4ZmwuZXUuYXV0aDAuY29tL3VzZXJpbmZvIl0sImlhdCI6MTc3MTMyNzY1NSwiZXhwIjoxNzcxNDE0MDU1LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIG9mZmxpbmVfYWNjZXNzIiwiYXpwIjoiNDNFWmlVTE5nOWM5TXAwU0RPeGduRTNSejh3YUVOZVkifQ.SAWGJn1r63dKmRKk1DeZL6ABXSzZgby4zogn5CH5hydLD4xyi7GBlllV27CeSTakQAWH5VSwLMdbrCvuSya2fWy5BA6ZS_5TjLsz6ZiOTIpVT17Fv7W6oI31acwl05RDM5xdP1tC0K9o4twnEs5PFRNGnJNXZvwNOe4y-B-DrnoXGUuidwQjOBVkkfKr3-J9H-hmuuNFn2x8VKjAFct2QGQHelMoNfZtfL4jagW6y4rrVNZvbGVN8tdna-09t5fQRzA6KPvUxGULeYNacPaWB6bXnKWHXxSrpVgWAogxfO5fAkzpLmpV3q2hVI0DHkD_Rjfwq01cQpngIVVrQqYXDg",
         "samples": {
             "triggers": {
                 "metric_exceeds_limit": {
@@ -56,6 +56,12 @@
                 "metric_drops_below_limit": {
                     "inverter_metric_id": "d2b9fcca-64da-405b-81ba-83abbced643a|-0100|92500SSN194W0086&18|Pac",
                     "limit_value": "1200"
+                }
+            },
+            "queries": {
+                "metric": {
+                    "inverter_metric_id": "d2b9fcca-64da-405b-81ba-83abbced643a|+0100|92500SSN194W0086&18|Pac",
+                    "when": "D-1"
                 }
             }
         }
