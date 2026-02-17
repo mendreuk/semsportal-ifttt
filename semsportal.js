@@ -131,7 +131,7 @@ async function getStationHistoryCurrentData(inverterId, metricIds, lastCheckTime
     const startHourMinute = lastCheckTime ? new Date(lastCheckTime).toISOString().slice(11, 16) : '00:00';
     const startTime = nowLocalTzString.slice(0, 10) + ' ' + startHourMinute; // ask always only for today, not history
     const endTime = nowLocalTzString.slice(0, 10) + ' 23:59';
-    logDebug('semsportal req startTime:', startTime);
+    logDebug('semsportal startTime:', startTime);
 
     const semsRespBody = await getStationHistoryDataChart(inverterId, metricIds, svcAccessToken, startTime, endTime);
     return semsRespBody?.data?.list?.[0].inverters?.[0].targets;
@@ -272,7 +272,7 @@ async function query(req, res) {
         const nowDate = Date.now();
         const startTime = whenFn.startTime(nowDate, tzOffset);
         const endTime = whenFn.endTime(nowDate, tzOffset);
-        logDebug('when: ' + whenFn.label + ', tzOffset: ' + tzOffset + ', startTime: ' + startTime + ', endTime: ' + endTime);
+        logDebug('when: ' + whenFn.label + ', tzOffset: ' + tzOffset + ', semsportal startTime: ' + startTime + ', endTime: ' + endTime);
 
         if (req.get('IFTTT-Test-Mode') !== '1') {
             const semsRespBody = await getStationHistoryDataChart(inverterId, [metricId], getUserFromToken(req).auth.access_token, startTime, endTime);
