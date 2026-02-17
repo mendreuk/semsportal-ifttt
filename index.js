@@ -91,7 +91,7 @@ api.use(function responseLogger(req, res, next) {
 });
 
 function serviceKeyCheck(req, res, next) {
-    if (process.env.IFTTT_SERVICE_KEY !== req.get("IFTTT-Service-Key")) {
+    if (process.env.IFTTT_SERVICE_KEY !== req.get("IFTTT-Service-Key") && process.env.IFTTT_SERVICE_KEY_STAGING !== req.get("IFTTT-Service-Key")) {
         const err = Error('Invalid service key');
         err.status = 401;
         next(err);
