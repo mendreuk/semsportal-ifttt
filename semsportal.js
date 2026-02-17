@@ -4,13 +4,73 @@ import { find } from 'geo-tz';
 
 const SEMS_PORTAL_API_BASEURL = 'https://eu.semsportal.com/api/';
 
-async function trigger(req, res) {
-    if (req.body.triggerFields && req.body.triggerFields.inverter_metric_id && req.body.triggerFields.limit_value) {
-        let triggerDataLimit = req.body.limit;
-        if (typeof triggerDataLimit === "undefined") {
-            triggerDataLimit = 50;
-        }
+const WHEN_QUERY_OPTS = {
+    'now': {
+        label: 'Now',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 5 * 60 * 1000, tzOffset).slice(0, 16),
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate, tzOffset).slice(0, 16)
+    },
+    'hour': {
+        label: 'Last hour',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 60 * 60 * 1000, tzOffset).slice(0, 16),
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate, tzOffset).slice(0, 16)
+    },
+    '24hours': {
+        label: 'Last 24 hours',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 24 * 60 * 60 * 1000, tzOffset).slice(0, 16),
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate, tzOffset).slice(0, 16)
+    },
+    'today': {
+        label: 'Today',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate, tzOffset).slice(0, 10) + ' 00:00',
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate, tzOffset).slice(0, 10) + ' 23:59'
+    },
+    'D-1': {
+        label: 'D-1 (Yesterday)',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 00:00',
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 23:59'
+    },
+    'D-2': {
+        label: 'D-2',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 2 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 00:00',
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 2 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 23:59'
+    },
+    'D-3': {
+        label: 'D-3',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 3 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 00:00',
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 3 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 23:59'
+    },
+    'D-4': {
+        label: 'D-4',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 4 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 00:00',
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 4 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 23:59'
+    },
+    'D-5': {
+        label: 'D-5',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 5 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 00:00',
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 5 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 23:59'
+    },
+    'D-6': {
+        label: 'D-6',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 6 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 00:00',
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 6 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 23:59'
+    },
+    'D-7': {
+        label: 'D-7',
+        startTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 7 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 00:00',
+        endTime: (nowDate, tzOffset) => tzDateToISOString(nowDate - 7 * 24 * 60 * 60 * 1000, tzOffset).slice(0, 10) + ' 23:59'
+    }
+};
 
+const TESTsemsRespBody = { data: { list: [{ pw_name: 'FakePowerStation', inverters: [{ name: 'FakeInverter', targets: [{ target_name: 'FakeTarget', target_unit: 'FakeUnit' }] }] }] } };
+
+async function trigger(req, res) {
+    const [pageIndex, pageLimit] = readIFTTTPaginatedReq(req);
+    if (!(pageIndex >= 0 && pageLimit >= 0)) { // includes 'undefined' and NaN check 
+        respondBadRequest(res, "Requested cursor does not exist");
+    } else if (!req.body.triggerFields || !req.body.triggerFields.inverter_metric_id || !req.body.triggerFields.limit_value) {
+        respondBadRequest(res, "Some trigger fields missing");
+    } else {
         const triggerData = [];
         const [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
         const tzOffset = inverterId.split('|')[1];
@@ -29,7 +89,7 @@ async function trigger(req, res) {
                     // when the metric is volatile, this avoids getting stuck in the wrong state in case one trigger type overtakes the other
                     // v1^3v2 or ^1v3^2 - when no.3 is being processed after no.2, better do not return triggerData at all
 
-                    for (let i = semsData.length - 1, j = i; i > 0 && triggerData.length < triggerDataLimit; i--) {
+                    for (let i = semsData.length - 1, j = i; i > 0; i--) {
                         if (semsData[i - 1].value != req.body.triggerFields.limit_value) {
                             if (isMetricLimitCrossed(triggerName, semsData[j].value, semsData[i - 1].value, req.body.triggerFields.limit_value)) {
                                 triggerData.push(createIFTTTTriggerData(semsRespBody, semsData[j], req.body.triggerFields.limit_value, tzOffset));
@@ -43,18 +103,13 @@ async function trigger(req, res) {
             }
         } else {
             // when being tested, top the data with fakes up to 3 items
-            for (let i = 0; triggerData.length < triggerDataLimit && triggerData.length < 3; i++) {
-                const semsRespBody = { data: { list: [{ pw_name: 'FakePowerStation', inverters: [{ name: 'FakeInverter', targets: [{ target_name: 'FakeTarget', target_unit: 'FakeUnit' }] }] }] } };
-                const semsData = { stat_date: '12/24/2024 20:00', value: -1 * i };
-                triggerData.push(createIFTTTTriggerData(semsRespBody, semsData, req.body.triggerFields.limit_value, tzOffset));
+            for (let i = 0; triggerData.length < 3; i++) {
+                const testSemsData = { stat_date: '12/24/2024 20:00', value: -1 * i };
+                triggerData.push(createIFTTTTriggerData(TESTsemsRespBody, testSemsData, req.body.triggerFields.limit_value, tzOffset));
             }
         }
 
-        res.status(200).send({
-            data: triggerData
-        });
-    } else {
-        respondBadRequest(res, "Some trigger fields missing");
+        res.status(200).send(createIFTTTPaginatedRes(triggerData, pageIndex, pageLimit));
     }
 }
 
@@ -131,7 +186,7 @@ function createIFTTTTriggerData(semsRespBody, semsData, limitValue, tzOffset) {
         metric: semsRespBody.data.list[0].inverters[0].targets[0].target_name,
         unit: semsRespBody.data.list[0].inverters[0].targets[0].target_unit,
         limit_value: limitValue,
-        current_value: Math.floor(semsData.value) == semsData.value ? Math.floor(semsData.value) : semsData.value,
+        current_value: Math.floor(semsData.value) == semsData.value ? Math.floor(semsData.value).toString() : semsData.value,
         meta: {
             id: getUuid(JSON.stringify(semsData)), // a unique identifier used to prevent Applets from firing more than once on the same item
             timestamp: Date.parse(semsData.stat_date + tzOffset) / 1000 // metas must be in descending order by the timestamp (in Unix seconds)
@@ -199,8 +254,90 @@ function getOffsetFromTz(timeZone = 'UTC', date = new Date()) {
 
 function tzDateToISOString(timestamp, tzOffset = "+0000") {
     const [offsetHours, offsetMinutes] = tzOffset.match(/.{1,3}/g);
-    const tzOffsetMinutes = (Number(offsetHours) * 60 + Number(offsetMinutes)) * 6e4;
-    return new Date(timestamp + tzOffsetMinutes).toISOString().slice(0, -1) + tzOffset;
+    const tzOffsetMillis = (Number(offsetHours) * 60 + Number(offsetMinutes)) * 6e4;
+    return new Date(timestamp + tzOffsetMillis).toISOString().slice(0, -1) + tzOffset;
+}
+
+async function query(req, res) {
+    const [pageIndex, pageLimit] = readIFTTTPaginatedReq(req);
+    if (!(pageIndex >= 0 && pageLimit >= 0)) { // includes 'undefined' and NaN check 
+        respondBadRequest(res, "Requested cursor does not exist");
+    } else if (!req.body.queryFields || !req.body.queryFields.inverter_metric_id || !req.body.queryFields.when) {
+        respondBadRequest(res, "Some query fields missing");
+    } else {
+        const queryData = [];
+        const [inverterId, metricId] = req.body.queryFields.inverter_metric_id.split('&');
+        const tzOffset = inverterId.split('|')[1];
+        const whenFn = WHEN_QUERY_OPTS[req.body.queryFields.when];
+        const nowDate = new Date();
+        const startTime = whenFn.startTime(nowDate, tzOffset);
+        const endTime = whenFn.endTime(nowDate, tzOffset);
+        logDebug('when: ' + req.body.queryFields.when + ', tzOffset: ' + tzOffset + ', startTime: ' + startTime + ', endTime: ' + endTime);
+
+        if (req.get('IFTTT-Test-Mode') !== '1') {
+            const semsRespBody = await getStationHistoryDataChart(inverterId, [metricId], getUserFromToken(req).auth.access_token, startTime, endTime);
+
+            const semsData = semsRespBody.data.list?.[0].inverters?.[0].targets?.[0].datas;
+            if (semsData && semsData.length > 0) {
+                for (let i = 0; i < semsData.length; i--) {
+                    queryData.push(createIFTTTQueryData(semsRespBody, semsData[i], tzOffset));
+                }
+                if (req.body.queryFields.when == 'now') {
+                    queryData.splice(0, queryData.length - 1);
+                }
+            }
+        } else {
+            // when being tested, top the data with fakes up to 3 items
+            for (let i = 0; queryData.length < 3; i++) {
+                const testSemsData = { stat_date: '12/24/2024 20:00', value: -1 * i };
+                queryData.push(createIFTTTQueryData(TESTsemsRespBody, testSemsData, tzOffset));
+            }
+        }
+
+        res.status(200).send(createIFTTTPaginatedRes(queryData, pageIndex, pageLimit));
+    }
+}
+
+function createIFTTTQueryData(semsRespBody, semsData, tzOffset) {
+    return {
+        time: new Date(semsData.stat_date + tzOffset).toISOString(), // must be ISO8601 in UTC
+        metric: semsRespBody.data.list[0].inverters[0].targets[0].target_name,
+        unit: semsRespBody.data.list[0].inverters[0].targets[0].target_unit,
+        value: Math.floor(semsData.value) == semsData.value ? Math.floor(semsData.value).toString() : semsData.value
+    };
+}
+
+function readIFTTTPaginatedReq(req) {
+    return req.body.cursor ? req.body.cursor.split('|').map(Number) : [0, typeof req.body.limit !== "undefined" ? req.body.limit : 50];
+}
+
+function createIFTTTPaginatedRes(data, index, limit) {
+    const resBody = {
+        data: data.slice(index * limit, (index + 1) * limit)
+    }
+    if ((index + 1) * limit < data.length) {
+        resBody['cursor'] = (index + 1) + '|' + limit;
+    }
+    return resBody;
+}
+
+function whenQueryOptions(req, res) {
+    const whenOptionsData = [];
+
+    Object.entries(WHEN_QUERY_OPTS).forEach(([k, v]) => {
+        whenOptionsData.push(createWhenIFTTTOptionsData(k, v.label));
+    });
+
+    res.status(200).send({
+        data: whenOptionsData
+    });
+}
+
+function createWhenIFTTTOptionsData(value, label) {
+    return {
+        label: label,
+        value: value
+    };
 }
 
 function checkResponseCode(semsRespBody) {
@@ -226,4 +363,4 @@ function respondBadRequest(res, msg) {
     });
 }
 
-export default { trigger, triggerOptions, getStationHistoryCurrentData, isMetricLimitCrossed };
+export default { trigger, triggerOptions, getStationHistoryCurrentData, isMetricLimitCrossed, query, whenQueryOptions };

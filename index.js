@@ -47,16 +47,22 @@ api.use(function setLogTraceAndComponents(req, res, next) {
             if (req.method === 'POST' && req.body?.triggerFields?.inverter_metric_id) { // trigger POST request
                 triggerId = req.body.trigger_identity;
                 [inverterId, metricId] = req.body.triggerFields.inverter_metric_id.split('&');
+            } else if (req.method === 'POST' && req.body?.queryFields?.inverter_metric_id) { // query POST request
+                [inverterId, metricId] = req.body.queryFields.inverter_metric_id.split('&');
             } else if (req.method === 'DELETE') { // trigger DELETE request
                 triggerId = req.path.substring(req.path.lastIndexOf('/') + 1);
                 if (triggerData[triggerId]) {
                     [inverterId, metricId] = triggerData[triggerId].triggerFields.inverter_metric_id.split('&');
                 }
             }
-            if (triggerId) {
+            if (inverterId && metricId) {
                 addLogComponents({
                     inverterId: inverterId,
-                    metricId: metricId,
+                    metricId: metricId
+                });
+            }
+            if (triggerId) {
+                addLogComponents({
                     triggerId: triggerId
                 });
             }
@@ -206,12 +212,22 @@ api.post('/ifttt/v1/triggers/metric_exceeds_limit', auth0.jwtCheck, userCheck, r
 api.post('/ifttt/v1/triggers/metric_exceeds_limit/fields/inverter_metric_id/options', auth0.jwtCheck, userCheck, semsportal.triggerOptions);
 api.delete('/ifttt/v1/triggers/metric_exceeds_limit/trigger_identity/:triggerId', auth0.jwtCheck, deleteTrigger);
 
+api.post('/ifttt/v1/queries/metric', auth0.jwtCheck, userCheck, register, semsportal.query);
+api.post('/ifttt/v1/queries/metric/fields/inverter_metric_id/options', auth0.jwtCheck, userCheck, semsportal.triggerOptions);
+api.post('/ifttt/v1/queries/metric/fields/when/options', auth0.jwtCheck, userCheck, semsportal.whenQueryOptions);
+
 // connection related handlers
 const noop = () => { };
 api.post('/ifttt/v1/webhooks/connection/enabled', serviceKeyCheck, noop);
 api.post('/ifttt/v1/webhooks/connection/disabled', serviceKeyCheck, noop);
 api.post('/ifttt/v1/webhooks/connection/updated', serviceKeyCheck, noop);
 api.post('/ifttt/v1/webhooks/trigger_subscription/fired', serviceKeyCheck, noop);
+
+api.use((req, res, next) => {
+    const err = Error('Not found');
+    err.status = 404;
+    next(err);
+});
 
 api.use(function errorHandler(err, req, res, next) {
     if (res.headersSent) {
